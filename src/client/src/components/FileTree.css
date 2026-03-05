@@ -1,0 +1,85 @@
+.file-tree {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+}
+
+.file-tree-header {
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.file-tree-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.file-tree-actions .btn-icon {
+  padding: 4px;
+  font-size: 12px;
+}
+
+.file-tree-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+  transition: background 0.15s;
+}
+
+.file-tree-item:hover {
+  background: var(--bg-hover);
+}
+
+.file-tree-item.active {
+  background: var(--accent-color);
+  color: white;
+}
+
+.file-tree-icon {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 20px;
+}
+
+.expand-icon {
+  font-size: 8px;
+  color: var(--text-secondary);
+  width: 12px;
+  text-align: center;
+}
+
+.file-tree-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loading-indicator {
+  font-size: 10px;
+  animation: spin 1s linear infinite;
+}
+
+.file-tree-children {
+  /* Indent handled by inline style */
+}

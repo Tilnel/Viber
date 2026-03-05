@@ -1,0 +1,37 @@
+{
+  "name": "kimi-code-web-assistant",
+  "version": "1.0.0",
+  "description": "Web-based AI code assistant with voice capabilities",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "NODE_ENV=development nodemon src/server/index.js",
+    "dev:client": "cd src/client && npm run dev",
+    "build": "cd src/client && npm run build",
+    "start": "NODE_ENV=production node src/server/index.js",
+    "db:migrate": "node src/server/db/migrate.js",
+    "db:seed": "node src/server/db/seed.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.4",
+    "pg": "^8.11.3",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "dotenv": "^16.3.1",
+    "simple-git": "^3.20.0",
+    "chokidar": "^3.5.3",
+    "node-pty": "^1.0.0",
+    "edge-tts": "^1.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

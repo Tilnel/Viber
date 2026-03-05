@@ -1,0 +1,85 @@
+.tool-call-block {
+  margin: 8px 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.tool-call-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.tool-call-header:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.tool-call-toggle {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 14px;
+  text-align: center;
+}
+
+.tool-call-icon {
+  font-size: 14px;
+}
+
+.tool-call-title {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-call-content {
+  padding: 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.tool-call-result {
+  margin: 0;
+}
+
+.tool-call-result-content {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg-primary);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* 滚动条样式 */
+.tool-call-result-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.tool-call-result-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tool-call-result-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.tool-call-result-content::-webkit-scrollbar-thumb:hover {
+  background: var(--bg-hover);
+}

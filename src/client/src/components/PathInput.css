@@ -1,0 +1,154 @@
+.path-input-container {
+  position: relative;
+  width: 100%;
+}
+
+.path-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0 12px;
+  transition: border-color 0.2s;
+}
+
+.path-input-wrapper:focus-within {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+}
+
+.path-input-icon {
+  font-size: 18px;
+  margin-right: 8px;
+  opacity: 0.7;
+}
+
+.path-input {
+  flex: 1;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  outline: none;
+}
+
+.path-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.path-input-loading {
+  font-size: 14px;
+  animation: spin 1s linear infinite;
+  opacity: 0.7;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 建议列表 */
+.path-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+}
+
+.path-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.path-suggestion:last-child {
+  border-bottom: none;
+}
+
+.path-suggestion:hover,
+.path-suggestion.highlighted {
+  background: var(--accent-color);
+}
+
+.suggestion-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.suggestion-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-suggestion:hover .suggestion-name,
+.path-suggestion.highlighted .suggestion-name {
+  color: white;
+}
+
+.suggestion-name .highlight {
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.suggestion-type {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+}
+
+.path-suggestion:hover .suggestion-type,
+.path-suggestion.highlighted .suggestion-type {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* 空结果 */
+.path-suggestions.empty {
+  padding: 20px;
+  text-align: center;
+}
+
+.no-results {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* 滚动条 */
+.path-suggestions::-webkit-scrollbar {
+  width: 8px;
+}
+
+.path-suggestions::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.path-suggestions::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.path-suggestions::-webkit-scrollbar-thumb:hover {
+  background: var(--bg-hover);
+}

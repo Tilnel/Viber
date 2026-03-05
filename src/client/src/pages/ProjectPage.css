@@ -1,0 +1,82 @@
+.project-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+}
+
+.project-loading,
+.project-error {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+.project-error {
+  color: var(--error-color);
+}
+
+.project-header {
+  height: var(--header-height);
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.header-left,
+.header-center,
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-highlight);
+  margin-left: 8px;
+}
+
+.header-center .btn-icon.active {
+  background: var(--accent-color);
+  color: white;
+}
+
+.project-main {
+  flex: 1;
+  overflow: hidden;
+}
+
+.project-sidebar {
+  min-width: 200px;
+}
+
+.project-editor {
+  display: flex;
+  flex-direction: column;
+}
+
+.project-chat {
+  min-width: 300px;
+}
+
+.resize-handle {
+  width: 4px;
+  background: var(--border-color);
+  transition: background 0.2s;
+}
+
+.resize-handle:hover {
+  background: var(--accent-color);
+}
+
+.resize-handle[data-resize-handle-active] {
+  background: var(--accent-color);
+}
