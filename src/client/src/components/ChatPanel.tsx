@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { toast } from 'react-toastify';
 import { flushSync } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useProjectStore } from '../stores/project';
 import { chatAPI, projectAPI, type StreamEvent } from '../services/api';
 import { useSettingsStore } from '../stores/settings';
-import VoiceButton from './VoiceButton';
+import VoiceConversationButton, { ttsService } from './VoiceConversationButton';
 import ToolCallBlock from './ToolCallBlock';
 import type { ChatMessage, ChatSession } from '../../../shared/types';
 import './ChatPanel.css';
@@ -341,9 +342,217 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     }
   };
 
-  const handleVoiceTranscript = (transcript: string) => {
-    setInputText(prev => prev + transcript);
-    inputRef.current?.focus();
+  const handleVoiceTranscript = async (transcript: string) => {
+    // 语音输入直接发送，不填入输入框
+    if (!transcript.trim() || isStreaming) return;
+    
+    if (!currentSession) {
+      const sessionName = generateSessionName(transcript);
+      const newSession = await createSession(sessionName);
+      setCurrentSession(newSession);
+      await sendMessageWithVoice(newSession.id, transcript, true);
+    } else {
+      const isFirstMessage = messages.length === 0;
+      await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
+    }
+  };
+
+  // 支持语音输出的消息发送
+  const sendMessageWithVoice = async (sessionId: number, content: string, isFirstMessage: boolean = false) => {
+    setIsStreaming(true);
+    streamingBlocksRef.current = [];
+    setStreamingBlocks([]);
+    
+    // Add user message to UI immediately
+    const userMessage: ChatMessage = {
+      id: Date.now(),
+      sessionId,
+      role: 'user',
+      content,
+      createdAt: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, userMessage]);
+    
+    // 如果是第一条消息，自动重命名 session
+    if (isFirstMessage && currentSession) {
+      const newName = generateSessionName(content);
+      renameSession(currentSession.id, newName);
+    }
+    
+    // Get context from current file
+    const { activeFilePath } = useProjectStore.getState();
+    
+    const context = {
+      currentFile: activeFilePath || undefined,
+      selectedCode: undefined
+    };
+    
+    // 收集AI回复用于TTS
+    let aiResponseText = '';
+    let lastSpeakTime = Date.now();
+    const speakInterval = 500; // 每500ms尝试播放一次累积的文本
+    
+    try {
+      await chatAPI.sendMessageStream(
+        sessionId,
+        content,
+        context,
+        {
+          onTextDelta: (text) => {
+            aiResponseText += text;
+            
+            // 更新UI
+            flushSync(() => {
+              setStreamingBlocks(prev => {
+                const lastBlock = prev[prev.length - 1];
+                if (lastBlock?.type === 'text') {
+                  const newBlocks = [...prev];
+                  newBlocks[newBlocks.length - 1] = {
+                    ...lastBlock,
+                    content: (lastBlock.content || '') + text
+                  };
+                  streamingBlocksRef.current = newBlocks;
+                  return newBlocks;
+                } else {
+                  const newBlocks = [...prev, { type: 'text' as const, content: text }];
+                  streamingBlocksRef.current = newBlocks;
+                  return newBlocks;
+                }
+              });
+            });
+
+            // 流式TTS播放
+            const now = Date.now();
+            if (now - lastSpeakTime > speakInterval && aiResponseText.length > 5) {
+              // 找到合适的断句位置（标点符号）
+              const speakText = findSpeakableSegment(aiResponseText);
+              if (speakText) {
+                ttsService.speakStreaming(speakText);
+                aiResponseText = aiResponseText.slice(speakText.length);
+                lastSpeakTime = now;
+              }
+            }
+          },
+          
+          onToolCall: (tool) => {
+            flushSync(() => {
+              setStreamingBlocks(prev => {
+                const target = tool.args.path || tool.args.command || 
+                              tool.args.pattern || tool.args.url || tool.args.q || '';
+                const newBlocks = [...prev, {
+                  type: 'tool' as const,
+                  id: tool.id,
+                  operation: tool.name,
+                  target,
+                  result: '',
+                  args: tool.args
+                }];
+                streamingBlocksRef.current = newBlocks;
+                return newBlocks;
+              });
+            });
+          },
+          
+          onToolResult: (result) => {
+            flushSync(() => {
+              setStreamingBlocks(prev => {
+                const index = prev.findIndex(b => b.type === 'tool' && b.id === result.id);
+                if (index >= 0) {
+                  const newBlocks = [...prev];
+                  newBlocks[index] = {
+                    ...newBlocks[index],
+                    result: result.content
+                  };
+                  streamingBlocksRef.current = newBlocks;
+                  return newBlocks;
+                }
+                const target = result.args.path || result.args.command || 
+                              result.args.pattern || result.args.url || result.args.q || '';
+                const newBlocks = [...prev, {
+                  type: 'tool' as const,
+                  id: result.id,
+                  operation: result.name,
+                  target,
+                  result: result.content,
+                  args: result.args
+                }];
+                streamingBlocksRef.current = newBlocks;
+                return newBlocks;
+              });
+            });
+          },
+          
+          onComplete: () => {
+            // 播放剩余的文本
+            if (aiResponseText.trim()) {
+              ttsService.speakStreaming(aiResponseText.trim());
+            }
+            
+            // 保存消息到数据库
+            if (streamingBlocksRef.current.length > 0) {
+              const finalBlocks = streamingBlocksRef.current.map(block => ({
+                type: block.type,
+                ...(block.type === 'text' 
+                  ? { content: block.content }
+                  : {
+                      id: block.id,
+                      operation: block.operation,
+                      target: block.target,
+                      result: block.result,
+                      args: block.args
+                    }
+                )
+              }));
+              
+              const assistantMessage: ChatMessage = {
+                id: Date.now() + 1,
+                sessionId,
+                role: 'assistant',
+                content: JSON.stringify(finalBlocks),
+                createdAt: new Date().toISOString()
+              };
+              setMessages(prev => [...prev, assistantMessage]);
+            }
+            
+            setIsStreaming(false);
+            setStreamingBlocks([]);
+            streamingBlocksRef.current = [];
+          },
+          
+          onError: (error) => {
+            console.error('Stream error:', error);
+            toast.error(`发送消息失败: ${error}`);
+            setIsStreaming(false);
+          }
+        }
+      );
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      toast.error('发送消息失败');
+      setIsStreaming(false);
+    }
+  };
+
+  // 找到可朗读的片段（到标点符号处）
+  const findSpeakableSegment = (text: string): string => {
+    // 优先在标点处断句
+    const breakpoints = /[。！？.!?\n]+/;
+    const match = text.match(breakpoints);
+    if (match && match.index !== undefined) {
+      return text.slice(0, match.index + 1);
+    }
+    // 如果没有标点，且文本足够长，返回一部分
+    if (text.length > 30) {
+      // 在空格或逗号处断句
+      const lastSpace = text.slice(0, 30).lastIndexOf(' ');
+      const lastComma = text.slice(0, 30).lastIndexOf('，');
+      const breakAt = Math.max(lastSpace, lastComma);
+      if (breakAt > 10) {
+        return text.slice(0, breakAt + 1);
+      }
+      return text.slice(0, 30);
+    }
+    return '';
   };
 
   const handleNewSession = async () => {
@@ -533,9 +742,10 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           />
           
           <div className="chat-actions">
-            <VoiceButton 
-              onTranscript={handleVoiceTranscript}
+            <VoiceConversationButton 
+              onUserSpeech={handleVoiceTranscript}
               disabled={isStreaming}
+              isAIResponding={isStreaming}
             />
             <button 
               className="btn btn-primary send-btn"
