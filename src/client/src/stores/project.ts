@@ -1,41 +1,43 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { projectAPI, fsAPI } from '../services/api';
+import { projectAPI, fsAPI, setProjectStoreRef } from '../services/api';
 import type { Project, ChatSession, FileNode, OpenFile } from '../../../shared/types';
 
-// 从 localStorage 恢复展开状态
-const getPersistedExpandedDirs = (): Set<string> => {
+// 从 localStorage 恢复展开状态（按项目）
+const getPersistedExpandedDirs = (projectId: number | null): Set<string> => {
+  if (!projectId) return new Set();
   try {
-    const saved = localStorage.getItem('kimi-filetree-expanded');
+    const saved = localStorage.getItem(`kimi-filetree-expanded-${projectId}`);
     return saved ? new Set(JSON.parse(saved)) : new Set();
   } catch {
     return new Set();
   }
 };
 
-// 保存展开状态到 localStorage
-const persistExpandedDirs = (dirs: Set<string>) => {
+// 保存展开状态到 localStorage（按项目）
+const persistExpandedDirs = (projectId: number, dirs: Set<string>) => {
   try {
-    localStorage.setItem('kimi-filetree-expanded', JSON.stringify([...dirs]));
+    localStorage.setItem(`kimi-filetree-expanded-${projectId}`, JSON.stringify([...dirs]));
   } catch (e) {
     console.error('Failed to persist expanded dirs:', e);
   }
 };
 
-// 从 localStorage 恢复滚动位置
-const getPersistedScrollTop = (): number => {
+// 从 localStorage 恢复滚动位置（按项目）
+const getPersistedScrollTop = (projectId: number | null): number => {
+  if (!projectId) return 0;
   try {
-    const saved = localStorage.getItem('kimi-filetree-scroll');
+    const saved = localStorage.getItem(`kimi-filetree-scroll-${projectId}`);
     return saved ? parseInt(saved, 10) : 0;
   } catch {
     return 0;
   }
 };
 
-// 保存滚动位置到 localStorage
-const persistScrollTop = (scrollTop: number) => {
+// 保存滚动位置到 localStorage（按项目）
+const persistScrollTop = (projectId: number, scrollTop: number) => {
   try {
-    localStorage.setItem('kimi-filetree-scroll', String(scrollTop));
+    localStorage.setItem(`kimi-filetree-scroll-${projectId}`, String(scrollTop));
   } catch (e) {
     console.error('Failed to persist scroll position:', e);
   }
@@ -172,6 +174,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }
       }
       
+      // 加载该项目的展开状态和滚动位置
+      const expandedDirs = getPersistedExpandedDirs(data.project.id);
+      const fileTreeScrollTop = getPersistedScrollTop(data.project.id);
+      
       set({
         currentProject: data.project,
         sessions: data.sessions,
@@ -179,7 +185,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         openFiles,
         activeFilePath: persistedFiles.active && persistedFiles.files.includes(persistedFiles.active) 
           ? persistedFiles.active 
-          : openFiles[0]?.path || null
+          : openFiles[0]?.path || null,
+        expandedDirs,
+        fileTreeScrollTop
       });
       
       // Load root directory
@@ -235,8 +243,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   
   // File Tree
   fileTree: [],
-  expandedDirs: getPersistedExpandedDirs(),
-  fileTreeScrollTop: getPersistedScrollTop(),
+  expandedDirs: new Set<string>(),
+  fileTreeScrollTop: 0,
   
   loadDirectory: async (path, isRefresh = false) => {
     try {
@@ -344,14 +352,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       } else {
         expanded.add(path);
       }
-      persistExpandedDirs(expanded);
+      // 按项目保存
+      if (state.currentProject) {
+        persistExpandedDirs(state.currentProject.id, expanded);
+      }
       return { expandedDirs: expanded };
     });
   },
   
   setFileTreeScrollTop: (scrollTop) => {
-    persistScrollTop(scrollTop);
-    set({ fileTreeScrollTop: scrollTop });
+    set(state => {
+      // 按项目保存
+      if (state.currentProject) {
+        persistScrollTop(state.currentProject.id, scrollTop);
+      }
+      return { fileTreeScrollTop: scrollTop };
+    });
   },
   
   startAutoRefresh: () => {
@@ -494,6 +510,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return 0;
   }
 }));
+
+// 设置 store 引用供 API 使用
+setProjectStoreRef(() => useProjectStore.getState());
 
 function getLanguageFromPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();

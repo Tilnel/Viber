@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import { query } from '../db/index.js';
-import { pathSecurity } from '../utils/pathSecurity.js';
+import { pathSecurity, setProjectRootDir } from '../utils/pathSecurity.js';
 
 const router = Router();
 
@@ -32,7 +32,10 @@ router.get('/', async (req, res, next) => {
         try {
           // 尝试将存储的相对路径解析为绝对路径
           // 项目路径存储的是相对于默认根目录的路径
-          const absolutePath = path.join(DEFAULT_ROOT_DIR, project.path);
+          // 处理路径：如果是绝对路径直接使用，否则拼接根目录
+          const absolutePath = path.isAbsolute(project.path) 
+            ? project.path 
+            : path.join(DEFAULT_ROOT_DIR, project.path);
           await fs.access(absolutePath);
           return { 
             id: project.id,
@@ -57,7 +60,9 @@ router.get('/', async (req, res, next) => {
             openedCount: project.opened_count,
             isPinned: project.is_pinned,
             exists: false,
-            absolutePath: path.join(DEFAULT_ROOT_DIR, project.path)
+            absolutePath: path.isAbsolute(project.path) 
+              ? project.path 
+              : path.join(DEFAULT_ROOT_DIR, project.path)
           };
         }
       })
@@ -81,29 +86,29 @@ router.post('/open', async (req, res, next) => {
       return res.status(400).json({ error: 'Path is required' });
     }
     
-    // 验证路径是否为绝对路径或相对路径
-    let absolutePath;
-    if (path.isAbsolute(projectPath)) {
-      // 如果是绝对路径，直接使用
-      absolutePath = path.normalize(projectPath);
-    } else {
-      // 如果是相对路径，相对于默认根目录解析
-      absolutePath = path.join(DEFAULT_ROOT_DIR, projectPath);
-    }
-    
-    // 检查路径是否在允许的根目录范围内
-    const relativeToRoot = path.relative(DEFAULT_ROOT_DIR, absolutePath);
-    const isOutsideRoot = relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot);
-    
-    if (isOutsideRoot) {
-      return res.status(403).json({ 
-        error: 'Access denied', 
-        message: `Path "${projectPath}" is outside root directory` 
-      });
-    }
-    
     // 检查路径是否存在且为目录
+    let absolutePath;
+    let relativePath;
+    
     try {
+      if (path.isAbsolute(projectPath)) {
+        absolutePath = path.normalize(projectPath);
+        // 计算相对于默认根目录的路径
+        relativePath = path.relative(DEFAULT_ROOT_DIR, absolutePath);
+        // 检查是否在允许范围内
+        if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+          return res.status(403).json({ 
+            error: 'Access denied', 
+            message: `Path "${projectPath}" is outside root directory` 
+          });
+        }
+      } else {
+        // 相对路径，先拼接再验证
+        const tempPath = path.join(DEFAULT_ROOT_DIR, projectPath);
+        absolutePath = path.normalize(tempPath);
+        relativePath = projectPath;
+      }
+      
       const stat = await fs.stat(absolutePath);
       if (!stat.isDirectory()) {
         return res.status(400).json({ error: 'Path is not a directory' });
@@ -113,11 +118,6 @@ router.post('/open', async (req, res, next) => {
     }
     
     const name = path.basename(absolutePath);
-    // 存储相对路径（相对于默认根目录）
-    const relativePath = relativeToRoot || '.'; // 如果是根目录本身，使用 '.'
-    
-    // 设置项目路径为新的根目录（供文件操作使用）
-    pathSecurity.setRootDir(absolutePath);
     
     // 插入或更新项目记录
     const { rows } = await query(`
@@ -246,7 +246,10 @@ router.get('/:id/stats', async (req, res, next) => {
     }
     
     // 使用默认根目录解析项目路径
-    const absolutePath = path.join(DEFAULT_ROOT_DIR, project.path);
+    // 处理路径：如果是绝对路径直接使用，否则拼接根目录
+    const absolutePath = path.isAbsolute(project.path) 
+      ? project.path 
+      : path.join(DEFAULT_ROOT_DIR, project.path);
     
     // 统计文件数量
     let fileCount = 0;

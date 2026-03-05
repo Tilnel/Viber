@@ -27,37 +27,66 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 
+// Store getState function to access current project
+let getProjectState: (() => { currentProject: { id: number } | null }) | null = null;
+
+// 设置 store 引用（由 store 初始化时调用）
+export function setProjectStoreRef(getState: () => { currentProject: { id: number } | null }) {
+  getProjectState = getState;
+}
+
+// 获取当前项目ID的辅助函数
+function getProjectId(): number | null {
+  return getProjectState?.()?.currentProject?.id || null;
+}
+
 // 文件系统 API
 export const fsAPI = {
-  listDirectory: (path: string): Promise<{ path: string; items: FileNode[] }> =>
-    fetchJSON(`${API_BASE}/fs/list?path=${encodeURIComponent(path)}`),
+  listDirectory: (path: string): Promise<{ path: string; items: FileNode[] }> => {
+    const projectId = getProjectId();
+    const params = new URLSearchParams({ path });
+    if (projectId) params.append('projectId', String(projectId));
+    return fetchJSON(`${API_BASE}/fs/list?${params}`);
+  },
   
-  readFile: (path: string): Promise<{ path: string; content: string; encoding: string; mtime: string; isBinary?: boolean }> =>
-    fetchJSON(`${API_BASE}/fs/read?path=${encodeURIComponent(path)}`),
+  readFile: (path: string): Promise<{ path: string; content: string; encoding: string; mtime: string; isBinary?: boolean }> => {
+    const projectId = getProjectId();
+    const params = new URLSearchParams({ path });
+    if (projectId) params.append('projectId', String(projectId));
+    return fetchJSON(`${API_BASE}/fs/read?${params}`);
+  },
   
-  writeFile: (path: string, content: string): Promise<{ success: boolean }> =>
-    fetchJSON(`${API_BASE}/fs/write`, {
+  writeFile: (path: string, content: string): Promise<{ success: boolean }> => {
+    const projectId = getProjectId();
+    return fetchJSON(`${API_BASE}/fs/write`, {
       method: 'POST',
-      body: JSON.stringify({ path, content })
-    }),
+      body: JSON.stringify({ path, content, projectId })
+    });
+  },
   
-  createFile: (path: string, type: 'file' | 'directory'): Promise<{ success: boolean }> =>
-    fetchJSON(`${API_BASE}/fs/operation`, {
+  createFile: (path: string, type: 'file' | 'directory'): Promise<{ success: boolean }> => {
+    const projectId = getProjectId();
+    return fetchJSON(`${API_BASE}/fs/operation`, {
       method: 'POST',
-      body: JSON.stringify({ operation: 'create', source: path, type })
-    }),
+      body: JSON.stringify({ operation: 'create', source: path, type, projectId })
+    });
+  },
   
-  deleteFile: (path: string): Promise<{ success: boolean }> =>
-    fetchJSON(`${API_BASE}/fs/operation`, {
+  deleteFile: (path: string): Promise<{ success: boolean }> => {
+    const projectId = getProjectId();
+    return fetchJSON(`${API_BASE}/fs/operation`, {
       method: 'POST',
-      body: JSON.stringify({ operation: 'delete', source: path })
-    }),
+      body: JSON.stringify({ operation: 'delete', source: path, projectId })
+    });
+  },
   
-  renameFile: (source: string, target: string): Promise<{ success: boolean }> =>
-    fetchJSON(`${API_BASE}/fs/operation`, {
+  renameFile: (source: string, target: string): Promise<{ success: boolean }> => {
+    const projectId = getProjectId();
+    return fetchJSON(`${API_BASE}/fs/operation`, {
       method: 'POST',
-      body: JSON.stringify({ operation: 'rename', source, target })
-    })
+      body: JSON.stringify({ operation: 'rename', source, target, projectId })
+    });
+  }
 };
 
 // 项目 API

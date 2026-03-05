@@ -121,16 +121,16 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     if (!inputText.trim() || isStreaming) return;
     
     if (!currentSession) {
-      // 新 session 用用户输入的前几个字命名
-      const sessionName = generateSessionName(inputText);
-      const newSession = await createSession(sessionName);
-      setCurrentSession(newSession);
-      await sendMessage(newSession.id, inputText, true);
-    } else {
-      // 检查是否是当前 session 的第一条消息
-      const isFirstMessage = messages.length === 0;
-      await sendMessage(currentSession.id, inputText, isFirstMessage);
+      // 没有当前 session，提示用户先创建一个
+      toast.info('请先创建一个会话');
+      // 自动打开 session 选择菜单
+      setShowSessionMenu(true);
+      return;
     }
+    
+    // 检查是否是当前 session 的第一条消息
+    const isFirstMessage = messages.length === 0;
+    await sendMessage(currentSession.id, inputText, isFirstMessage);
     
     setInputText('');
   };
@@ -347,14 +347,15 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     if (!transcript.trim() || isStreaming) return;
     
     if (!currentSession) {
-      const sessionName = generateSessionName(transcript);
-      const newSession = await createSession(sessionName);
-      setCurrentSession(newSession);
-      await sendMessageWithVoice(newSession.id, transcript, true);
-    } else {
-      const isFirstMessage = messages.length === 0;
-      await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
+      // 没有当前 session，提示用户先创建一个
+      toast.info('请先创建一个会话');
+      // 自动打开 session 选择菜单
+      setShowSessionMenu(true);
+      return;
     }
+    
+    const isFirstMessage = messages.length === 0;
+    await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
   };
 
   // 支持语音输出的消息发送
@@ -622,31 +623,41 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           
           {showSessionMenu && (
             <div className="session-menu">
-              {sessions.map(session => (
-                <div
-                  key={session.id}
-                  className={`session-item ${currentSession?.id === session.id ? 'active' : ''}`}
-                  onClick={() => {
-                    setCurrentSession(session);
-                    setShowSessionMenu(false);
-                  }}
-                >
-                  <span className="session-name">{session.name}</span>
-                  <span className="message-count">{session.messageCount} 消息</span>
-                  <span 
-                    className="delete-btn" 
-                    title="删除会话"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteSession(session.id);
+              {sessions.length === 0 ? (
+                <div className="session-item" style={{ color: 'var(--text-secondary)', cursor: 'default' }}>
+                  暂无会话
+                </div>
+              ) : (
+                sessions.map(session => (
+                  <div
+                    key={session.id}
+                    className={`session-item ${currentSession?.id === session.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setCurrentSession(session);
+                      setShowSessionMenu(false);
                     }}
                   >
-                    ✕
-                  </span>
-                </div>
-              ))}
+                    <span className="session-name" title={session.name}>
+                      {session.name || '未命名会话'}
+                    </span>
+                    {session.messageCount > 0 && (
+                      <span className="message-count">{session.messageCount} 条</span>
+                    )}
+                    <span 
+                      className="delete-btn" 
+                      title="删除会话"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSession(session.id);
+                      }}
+                    >
+                      ✕
+                    </span>
+                  </div>
+                ))
+              )}
               <div className="session-item new" onClick={handleNewSession}>
-                + 新会话
+                + 新建会话
               </div>
             </div>
           )}
@@ -659,7 +670,18 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
 
       {/* Messages */}
       <div className="chat-messages">
-        {messages.length === 0 && streamingBlocks.length === 0 && (
+        {!currentSession ? (
+          <div className="chat-welcome no-session">
+            <h3>👋 欢迎使用 Kimi AI 助手</h3>
+            <p>请先创建一个会话开始对话</p>
+            <button 
+              className="btn btn-primary create-session-btn" 
+              onClick={handleNewSession}
+            >
+              ✚ 创建新会话
+            </button>
+          </div>
+        ) : messages.length === 0 && streamingBlocks.length === 0 && (
           <div className="chat-welcome">
             <h3>🤖 Kimi AI 助手</h3>
             <p>我可以帮你：</p>

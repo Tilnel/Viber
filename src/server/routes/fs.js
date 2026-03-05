@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
-import { pathSecurity } from '../utils/pathSecurity.js';
+import { getPathSecurity } from '../utils/pathSecurity.js';
 
 // 检测文件是否为二进制文件
 async function isBinaryFile(filePath) {
@@ -62,10 +62,19 @@ async function isBinaryFile(filePath) {
 
 const router = Router();
 
+// 辅助函数：从请求中获取 projectId 和对应的 PathSecurity 实例
+function getProjectContext(req) {
+  // 从查询参数或请求体中获取 projectId
+  const projectId = req.query.projectId || req.body?.projectId;
+  const pathSecurity = getPathSecurity(projectId);
+  return { projectId, pathSecurity };
+}
+
 // 列出目录内容
 router.get('/list', async (req, res, next) => {
   try {
     const dirPath = req.query.path || '.';
+    const { pathSecurity } = getProjectContext(req);
     const safePath = pathSecurity.sanitizePath(dirPath);
     
     const entries = await fs.readdir(safePath, { withFileTypes: true });
@@ -121,6 +130,7 @@ router.get('/read', async (req, res, next) => {
       return res.status(400).json({ error: 'Path is required' });
     }
     
+    const { pathSecurity } = getProjectContext(req);
     const safePath = pathSecurity.sanitizePath(filePath);
     
     // 检查是否为文件
@@ -170,7 +180,7 @@ router.get('/read', async (req, res, next) => {
 // 写入文件
 router.post('/write', async (req, res, next) => {
   try {
-    const { path: filePath, content, encoding = 'utf-8' } = req.body;
+    const { path: filePath, content, encoding = 'utf-8', projectId } = req.body;
     
     if (!filePath) {
       return res.status(400).json({ error: 'Path is required' });
@@ -180,6 +190,7 @@ router.post('/write', async (req, res, next) => {
       return res.status(400).json({ error: 'Content is required' });
     }
     
+    const pathSecurity = getPathSecurity(projectId);
     const safePath = pathSecurity.sanitizePath(filePath);
     
     // 确保目录存在
@@ -205,12 +216,13 @@ router.post('/write', async (req, res, next) => {
 // 文件操作（创建、删除、重命名、移动）
 router.post('/operation', async (req, res, next) => {
   try {
-    const { operation, source, target, type = 'file' } = req.body;
+    const { operation, source, target, type = 'file', projectId } = req.body;
     
     if (!operation || !source) {
       return res.status(400).json({ error: 'Operation and source are required' });
     }
     
+    const pathSecurity = getPathSecurity(projectId);
     const safeSource = pathSecurity.sanitizePath(source);
     
     switch (operation) {
@@ -263,7 +275,7 @@ router.post('/operation', async (req, res, next) => {
 // 路径补全建议
 router.get('/complete', async (req, res, next) => {
   try {
-    const { query, limit = 20 } = req.query;
+    const { query, limit = 20, projectId } = req.query;
     
     if (!query || typeof query !== 'string') {
       return res.json({ suggestions: [] });
@@ -284,6 +296,7 @@ router.get('/complete', async (req, res, next) => {
     }
     
     try {
+      const pathSecurity = getPathSecurity(projectId);
       const safePath = pathSecurity.sanitizePath(searchPath);
       const entries = await fs.readdir(safePath, { withFileTypes: true });
       
@@ -338,7 +351,7 @@ router.get('/complete', async (req, res, next) => {
 // 搜索文件内容
 router.get('/search', async (req, res, next) => {
   try {
-    const { q, path: searchPath = '.', glob = '*', maxResults = 100 } = req.query;
+    const { q, path: searchPath = '.', glob = '*', maxResults = 100, projectId } = req.query;
     
     if (!q) {
       return res.status(400).json({ error: 'Query is required' });

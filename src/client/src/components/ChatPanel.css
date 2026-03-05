@@ -49,17 +49,32 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   z-index: 100;
-  max-height: 300px;
+  max-height: min(400px, 60vh);
+  min-width: 220px;
   overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .session-item {
-  padding: 8px 12px;
+  padding: 10px 12px;
   cursor: pointer;
   font-size: 13px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.session-item:last-of-type {
+  border-bottom: none;
+}
+
+.session-item.new {
+  border-top: 1px solid var(--border-color);
+  color: var(--accent-color);
+  justify-content: center;
+  font-weight: 500;
 }
 
 .session-item:hover {
@@ -71,20 +86,23 @@
   color: white;
 }
 
-.session-item.new {
-  border-top: 1px solid var(--border-color);
-  color: var(--accent-color);
-}
+
 
 .message-count {
   font-size: 11px;
   color: var(--text-secondary);
   margin-left: auto;
-  margin-right: 8px;
+  margin-right: 4px;
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .session-item.active .message-count {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .session-name {
@@ -92,6 +110,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  max-width: 120px;
 }
 
 .session-item .delete-btn {
@@ -399,4 +419,30 @@
 /* 减少段落间的额外空行 */
 .markdown-content br {
   display: none;
+}
+
+/* 无 session 状态的提示样式 */
+.chat-welcome.no-session {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 48px 24px;
+}
+
+.chat-welcome.no-session h3 {
+  margin: 0;
+}
+
+.chat-welcome.no-session p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.create-session-btn {
+  margin-top: 8px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
 }

@@ -252,6 +252,14 @@ router.post('/sessions/:sessionId/messages', async (req, res, next) => {
       VALUES ($1, 'user', $2, $3)
     `, [sessionId, content, JSON.stringify(context)]);
     
+    // 获取历史消息（用于构建对话上下文）
+    const { rows: historyMessages } = await query(`
+      SELECT role, content, created_at
+      FROM messages
+      WHERE session_id = $1
+      ORDER BY created_at ASC
+    `, [sessionId]);
+    
     // 构建系统提示
     let systemPrompt = `You are Kimi, a helpful AI assistant integrated into a web-based code editor.`;
     
@@ -268,8 +276,56 @@ router.post('/sessions/:sessionId/messages', async (req, res, next) => {
       systemPrompt += `\n\nProject path: ${context.projectPath}`;
     }
     
-    // 构建传递给 Kimi CLI 的提示
-    const userPrompt = content;
+    // 构建完整的对话历史（限制最近的 20 轮对话以避免超出上下文长度）
+    let conversationHistory = '';
+    const MAX_HISTORY_ROUNDS = 20;
+    const recentMessages = historyMessages.slice(-MAX_HISTORY_ROUNDS * 2); // 每轮包含 user + assistant
+    
+    for (const msg of recentMessages) {
+      if (msg.role === 'user') {
+        // 解析 content，可能是字符串或 JSON blocks
+        let userContent = msg.content;
+        try {
+          const parsed = JSON.parse(msg.content);
+          if (Array.isArray(parsed)) {
+            // 如果是 blocks 格式，提取文本内容
+            userContent = parsed
+              .filter(b => b.type === 'text')
+              .map(b => b.content)
+              .join('');
+          }
+        } catch {
+          // 不是 JSON，使用原始内容
+        }
+        conversationHistory += `\n\nUser: ${userContent}`;
+      } else if (msg.role === 'assistant') {
+        // 解析 assistant 的 content
+        let assistantContent = msg.content;
+        try {
+          const parsed = JSON.parse(msg.content);
+          if (Array.isArray(parsed)) {
+            // 如果是 blocks 格式，提取文本内容
+            assistantContent = parsed
+              .filter(b => b.type === 'text')
+              .map(b => b.content)
+              .join('');
+          }
+        } catch {
+          // 不是 JSON，使用原始内容
+        }
+        if (assistantContent.trim()) {
+          conversationHistory += `\n\nAssistant: ${assistantContent}`;
+        }
+      }
+    }
+    
+    // 构建完整的 prompt：系统提示 + 对话历史 + 当前输入
+    const fullPrompt = systemPrompt + conversationHistory + '\n\nAssistant:';
+    
+    console.log('Session ID:', sessionId);
+    console.log('History messages count:', historyMessages.length);
+    console.log('Recent messages used:', recentMessages.length);
+    console.log('Prompt length:', fullPrompt.length);
     
     // 设置流式响应头 - 禁用所有缓冲
     // 使用 application/x-ndjson 表示每行一个 JSON 对象的流
@@ -283,16 +339,11 @@ router.post('/sessions/:sessionId/messages', async (req, res, next) => {
     res.flushHeaders?.();
     
     // 启动 Kimi CLI 进程
-    // 使用 --session 参数维持对话上下文
+    // 不再依赖 --session 参数，因为我们手动管理对话上下文
     const kimiArgs = [
       '--print',
-      '--output-format=stream-json',
-      '--session', `kimi-web-${sessionId}`
+      '--output-format=stream-json'
     ];
-    
-    // 构建系统提示 + 当前用户输入
-    // Kimi CLI 会自动维护会话历史
-    const fullPrompt = systemPrompt + '\n\nUser: ' + userPrompt + '\n\nAssistant:';
     
     console.log('Starting Kimi CLI with prompt length:', fullPrompt.length);
     

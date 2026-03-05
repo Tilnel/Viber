@@ -71,6 +71,11 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Static files (for production)
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../../dist')));
+  
+  // SPA fallback - serve index.html for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../dist/index.html'));
+  });
 }
 
 // Health check
