@@ -24,6 +24,10 @@ export enum ViberMessageType {
   VOICE_ASR_INTERIM = 'voice:asr:interim',
   VOICE_ASR_FINAL = 'voice:asr:final',
   VOICE_INTERRUPT = 'voice:interrupt',
+  VOICE_LLM_START = 'voice:llm:start',
+  VOICE_LLM_CHUNK = 'voice:llm:chunk',
+  VOICE_LLM_DONE = 'voice:llm:done',
+  VOICE_END = 'voice:end',
   
   // 播报
   SPEAKER_PLAY = 'speaker:play',

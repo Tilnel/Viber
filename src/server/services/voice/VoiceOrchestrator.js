@@ -95,6 +95,15 @@ export class VoiceOrchestrator {
   async processLLM(streamId, dialog) {
     console.log(`[VoiceOrchestrator] Starting LLM for ${streamId}`);
     
+    // 通知前端 LLM 开始处理
+    this.socketManager.sendToSocket(dialog.socketId, {
+      type: 'chat:thinking',
+      data: {
+        streamId,
+        sessionId: dialog.sessionId
+      }
+    });
+    
     try {
       // 构建系统提示词
       const systemMessage = LLMMessage.text(

@@ -14,6 +14,7 @@ import ResizableInputArea from './ResizableInputArea';
 import type { ChatMessage, ChatSession } from '../../../shared/types';
 import './ChatPanel.css';
 import { cleanTextForTTSStreaming } from '../utils/ttsTextCleaner';
+import { getViberSocket, ViberMessageType } from '../services/viberSocket';
 
 // 消息块类型
 interface MessageBlock {
@@ -64,6 +65,13 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
 
   // 打断标志 - 阻止后续的TTS播放
   const interruptedRef = useRef(false);
+  
+  // WebSocket 引用
+  const viberSocketRef = useRef(getViberSocket());
+  
+  // 语音流状态 - 用于后端推送的 LLM 消息
+  const [isVoiceFlowActive, setIsVoiceFlowActive] = useState(false);
+  const voiceAccumulatedTextRef = useRef('');
 
   // 停止生成
   const stopGeneration = useCallback(() => {
@@ -122,6 +130,114 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     } else {
       setMessages([]);
     }
+  }, [currentSession]);
+  
+  // WebSocket 消息监听 - 后端语音对话流程推送
+  useEffect(() => {
+    const socket = viberSocketRef.current;
+    
+    // 监听 LLM 思考/开始
+    const unsubscribeThinking = socket.on(ViberMessageType.CHAT_THINKING, (data) => {
+      console.log('[ChatPanel] Voice LLM started:', data);
+      setIsVoiceFlowActive(true);
+      voiceAccumulatedTextRef.current = '';
+      
+      // 开始流式显示
+      setIsStreaming(true);
+      streamingBlocksRef.current = [];
+      setStreamingBlocks([]);
+    });
+    
+    // 监听 LLM 流式内容
+    const unsubscribeDelta = socket.on(ViberMessageType.CHAT_DELTA, (data) => {
+      const { content } = data;
+      
+      if (content) {
+        voiceAccumulatedTextRef.current += content;
+        
+        flushSync(() => {
+          setStreamingBlocks(prev => {
+            const lastBlock = prev[prev.length - 1];
+            if (lastBlock?.type === 'text') {
+              const newBlocks = [...prev];
+              newBlocks[newBlocks.length - 1] = {
+                ...lastBlock,
+                content: voiceAccumulatedTextRef.current
+              };
+              streamingBlocksRef.current = newBlocks;
+              return newBlocks;
+            } else {
+              const newBlocks = [...prev, { type: 'text' as const, content: content }];
+              streamingBlocksRef.current = newBlocks;
+              return newBlocks;
+            }
+          });
+        });
+      }
+    });
+    
+    // 监听 LLM 完成
+    const unsubscribeComplete = socket.on(ViberMessageType.CHAT_COMPLETE, (data) => {
+      console.log('[ChatPanel] Voice LLM done:', data);
+      
+      // 保存消息到 UI
+      if (streamingBlocksRef.current.length > 0 && currentSession) {
+        const finalBlocks = streamingBlocksRef.current.map(block => ({
+          type: block.type,
+          ...(block.type === 'text' 
+            ? { content: block.content }
+            : {
+                id: block.id,
+                operation: block.operation,
+                target: block.target,
+                result: block.result,
+                args: block.args
+              }
+          )
+        }));
+        
+        const assistantMessage: ChatMessage = {
+          id: Date.now() + 1,
+          sessionId: currentSession.id,
+          role: 'assistant',
+          content: JSON.stringify(finalBlocks),
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, assistantMessage]);
+      }
+      
+      setIsStreaming(false);
+      setStreamingBlocks([]);
+      streamingBlocksRef.current = [];
+      setIsVoiceFlowActive(false);
+    });
+    
+    // 监听 TTS 音频播放
+    const unsubscribeSpeakerPlay = socket.on(ViberMessageType.SPEAKER_PLAY, (data) => {
+      const { audio, text } = data;
+      console.log('[ChatPanel] TTS audio received, length:', audio?.length);
+      
+      if (audio && !interruptedRef.current) {
+        // Base64 解码并播放
+        try {
+          const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+          const blob = new Blob([audioData], { type: 'audio/mp3' });
+          const url = URL.createObjectURL(blob);
+          const audioEl = new Audio(url);
+          audioEl.play().catch(e => console.error('[ChatPanel] TTS play error:', e));
+          audioEl.onended = () => URL.revokeObjectURL(url);
+        } catch (e) {
+          console.error('[ChatPanel] TTS decode error:', e);
+        }
+      }
+    });
+    
+    return () => {
+      unsubscribeThinking();
+      unsubscribeDelta();
+      unsubscribeComplete();
+      unsubscribeSpeakerPlay();
+    };
   }, [currentSession]);
 
   // Edge TTS 无需初始化
@@ -465,19 +581,17 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     processingVoiceRef.current = transcript;
     processingVoiceTimeRef.current = now;
     
-    if (!currentSession) {
-      toast.info('请先创建一个会话');
-      setShowSessionMenu(true);
-      return;
-    }
+    // 语音输入的文字只填入输入框，不自动发送
+    // 后端 VoiceOrchestrator 会处理 LLM + TTS 流程
+    console.log('[ChatPanel] Voice transcript received:', transcript);
     
-    console.log('[ChatPanel] Voice transcript, auto-sending:', transcript);
-    
-    // 1. 填入输入框（用户反馈：看到识别的内容）
-    setInputText(transcript);
-    
-    // 2. 自动发送给 LLM 处理（语音对话模式）
-    sendMessageWithVoice(currentSession.id, transcript, false);
+    // 填入输入框让用户看到识别的内容
+    setInputText(prev => {
+      if (prev && prev.trim()) {
+        return prev + '\n' + transcript;
+      }
+      return transcript;
+    });
   };
 
   // AI 回复文本收集（用于语音对话TTS）
