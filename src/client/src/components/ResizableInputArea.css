@@ -1,70 +1,52 @@
-.chat-input-container {
-  padding: 8px 12px 12px;
+.resizable-input-container {
   border-top: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-/* 拖动调整高度手柄 */
+/* 拖动调整手柄 */
 .resize-handle {
+  height: 8px;
   display: flex;
-  justify-content: center;
   align-items: center;
-  height: 12px;
-  margin: -8px -12px 4px;
-  cursor: ns-resize;
-  position: relative;
+  justify-content: center;
+  cursor: row-resize;
+  background: transparent;
   transition: background-color 0.2s;
 }
 
-.resize-handle:hover {
+.resize-handle:hover,
+.resize-handle.dragging {
   background-color: var(--bg-tertiary);
 }
 
-.resize-handle.resizing {
-  background-color: var(--accent-color-alpha, rgba(59, 130, 246, 0.1));
-}
-
-.resize-handle-bar {
+.resize-indicator {
   width: 40px;
-  height: 4px;
+  height: 3px;
   background-color: var(--border-color);
   border-radius: 2px;
-  transition: background-color 0.2s, width 0.2s;
+  transition: all 0.2s;
 }
 
-.resize-handle:hover .resize-handle-bar,
-.resize-handle.resizing .resize-handle-bar {
+.resize-handle:hover .resize-indicator,
+.resize-handle.dragging .resize-indicator {
   background-color: var(--accent-color);
   width: 60px;
 }
 
-/* 上下文提示 */
-.context-hint {
-  margin-bottom: 4px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.char-count {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-/* 输入区域包装器 */
-.chat-input-wrapper {
+/* 主输入区域 */
+.input-area {
   display: flex;
   gap: 8px;
-  align-items: stretch;
+  padding: 8px 12px;
   min-height: 60px;
 }
 
 /* 文本输入框 */
-.chat-input {
+.main-textarea {
   flex: 1;
   min-height: 40px;
-  max-height: 100%;
   padding: 10px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -77,34 +59,41 @@
   overflow-y: auto;
 }
 
-.chat-input:focus {
+.main-textarea:focus {
   outline: none;
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px var(--accent-color-alpha, rgba(59, 130, 246, 0.1));
 }
 
-/* 垂直排列的操作按钮 */
-.chat-actions-vertical {
+.main-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 右侧垂直操作按钮 */
+.vertical-actions {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
+  width: 40px;
 }
 
-.action-buttons-top {
+.action-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.action-buttons-bottom {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.action-group.top {
+  flex: 1;
+}
+
+.action-group.bottom {
+  justify-content: flex-end;
 }
 
 /* 按钮样式 */
-.chat-actions-vertical .send-btn {
+.action-btn {
   width: 40px;
   height: 40px;
   padding: 0;
@@ -113,103 +102,118 @@
   justify-content: center;
   font-size: 18px;
   border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.chat-actions-vertical .send-btn:disabled {
+.action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* 语音按钮适配 */
-.chat-actions-vertical .voice-conversation-wrapper {
-  width: 40px;
+.btn-primary {
+  background: var(--accent-color);
+  color: white;
 }
 
-.chat-actions-vertical .voice-conversation-btn {
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-color-hover);
+}
+
+.btn-danger {
+  background: var(--error-color, #ef4444);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: var(--error-color-hover, #dc2626);
+}
+
+/* 适配 VoiceConversationButton 在垂直布局中 */
+.vertical-actions .voice-conversation-wrapper {
+  width: 40px;
+  height: 40px;
+}
+
+.vertical-actions .voice-conversation-btn {
   width: 40px;
   height: 40px;
   padding: 0;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 10px;
-}
-
-.chat-actions-vertical .voice-conversation-btn .voice-icon {
-  font-size: 16px;
-}
-
-.chat-actions-vertical .voice-conversation-btn .voice-status-text {
-  font-size: 9px;
-  display: none;
-}
-
-.chat-actions-vertical .voice-conversation-btn.active .voice-status-text {
-  display: block;
-}
-
-/* TTS 控制按钮适配 */
-.chat-actions-vertical .tts-control-fab {
-  position: static;
-  width: 40px;
-  height: 40px;
-}
-
-.chat-actions-vertical .tts-control-button {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  font-size: 16px;
   border-radius: 8px;
-  position: static;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-primary);
+  transition: all 0.2s;
 }
 
-/* 输入提示 */
-.input-hint {
+.vertical-actions .voice-conversation-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.vertical-actions .voice-conversation-btn.active {
+  background: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.vertical-actions .voice-conversation-btn .voice-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.vertical-actions .voice-conversation-btn .voice-status-text {
+  font-size: 8px;
+  margin-top: 1px;
+}
+
+/* 适配 TTSControl 在垂直布局中 */
+.vertical-actions .tts-control-fab {
+  position: static;
+  width: 40px;
+  height: 40px;
+}
+
+.vertical-actions .tts-control-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent-color);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.vertical-actions .tts-control-button:hover {
+  transform: scale(1.05);
+}
+
+/* 底部提示 */
+.input-footer {
   display: flex;
   justify-content: space-between;
-  margin-top: 6px;
+  align-items: center;
+  padding: 4px 12px 8px;
   font-size: 11px;
   color: var(--text-secondary);
 }
 
+.hint {
+  opacity: 0.8;
+}
+
 .resize-hint {
-  opacity: 0.7;
-}
-
-/* 语音识别中的消息样式 */
-.message.voice-transcript {
-  opacity: 0.9;
-  animation: pulse 2s infinite;
-}
-
-.message.voice-transcript .message-avatar {
-  background: var(--accent-color-alpha, rgba(59, 130, 246, 0.2));
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.9;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-/* 语音识别的徽章 */
-.stt-badge {
-  display: inline-block;
-  font-size: 10px;
-  background: linear-gradient(135deg, var(--accent-color), var(--accent-color-hover));
-  color: white;
-  padding: 2px 8px;
-  border-radius: 12px;
-  margin-bottom: 4px;
-  font-weight: 500;
+  opacity: 0.6;
 }

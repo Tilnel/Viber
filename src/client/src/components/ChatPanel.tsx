@@ -443,7 +443,6 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       return;
     }
     
-    // 语音输入直接发送，不填入输入框
     if (!transcript.trim()) {
       console.log('[ChatPanel] Voice transcript skipped: empty');
       return;
@@ -453,7 +452,6 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     if (isStreaming) {
       console.log('[ChatPanel] Interrupting current generation for new voice input');
       stopGeneration();
-      // 等待一小段时间确保中断生效
       await new Promise(r => setTimeout(r, 100));
     }
     
@@ -473,6 +471,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     const tempId = Date.now();
     setVoiceTranscriptMessage({ text: transcript, id: tempId });
     
+    // 直接发送消息
     const isFirstMessage = messages.length === 0;
     await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
     

@@ -1,9 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { toast } from 'react-toastify';
 import TTSControl from './TTSControl';
 import VoiceConversationButton from './VoiceConversationButton';
-import { volcanoTTSService } from '../services/volcanoTTS';
-import { piperTTSService } from '../services/piperTTS';
 import './ResizableInputArea.css';
 
 interface ResizableInputAreaProps {
@@ -17,6 +14,10 @@ interface ResizableInputAreaProps {
   handleVoiceTranscript: (text: string) => void;
 }
 
+const MIN_HEIGHT = 60;
+const MAX_HEIGHT = 300;
+const DEFAULT_HEIGHT = 100;
+
 export default function ResizableInputArea({
   inputText,
   setInputText,
@@ -27,42 +28,40 @@ export default function ResizableInputArea({
   stopGeneration,
   handleVoiceTranscript
 }: ResizableInputAreaProps) {
-  // 输入区域高度状态
-  const [inputHeight, setInputHeight] = useState(80); // 默认高度 80px
-  const [isResizing, setIsResizing] = useState(false);
+  const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const startYRef = useRef(0);
-  const startHeightRef = useRef(0);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
 
   // 处理拖动开始
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    setIsResizing(true);
-    startYRef.current = e.clientY;
-    startHeightRef.current = inputHeight;
-    document.body.style.cursor = 'ns-resize';
+    setIsDragging(true);
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = height;
+    document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
-  }, [inputHeight]);
+  }, [height]);
 
-  // 处理拖动中
+  // 处理拖动
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-      
-      const deltaY = startYRef.current - e.clientY;
-      const newHeight = Math.max(60, Math.min(400, startHeightRef.current + deltaY));
-      setInputHeight(newHeight);
+      if (!isDragging) return;
+      const delta = dragStartY.current - e.clientY;
+      const newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, dragStartHeight.current + delta));
+      setHeight(newHeight);
     };
 
     const handleMouseUp = () => {
-      if (isResizing) {
-        setIsResizing(false);
+      if (isDragging) {
+        setIsDragging(false);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       }
     };
 
-    if (isResizing) {
+    if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     }
@@ -71,71 +70,67 @@ export default function ResizableInputArea({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizing]);
+  }, [isDragging]);
 
-  // 自动调整 textarea 高度
+  // 自动调整textarea高度
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, inputHeight - 20)}px`;
+    const textarea = inputRef.current;
+    if (textarea) {
+      textarea.style.height = '0';
+      const scrollHeight = textarea.scrollHeight;
+      const maxTextareaHeight = height - 20;
+      textarea.style.height = `${Math.min(scrollHeight, maxTextareaHeight)}px`;
     }
-  }, [inputText, inputHeight, inputRef]);
+  }, [inputText, height, inputRef]);
 
   return (
-    <div className="chat-input-container" ref={containerRef}>
-      {/* 拖动调整高度手柄 */}
+    <div className="resizable-input-container" ref={containerRef}>
+      {/* 拖动调整手柄 */}
       <div 
-        className={`resize-handle ${isResizing ? 'resizing' : ''}`}
-        onMouseDown={handleResizeStart}
-        title="拖动调整高度"
+        className={`resize-handle ${isDragging ? 'dragging' : ''}`}
+        onMouseDown={handleMouseDown}
       >
-        <div className="resize-handle-bar"></div>
+        <div className="resize-indicator"></div>
       </div>
 
-      <div className="context-hint">
-        {inputText.length > 0 && (
-          <span className="char-count">{inputText.length} 字符</span>
-        )}
-      </div>
-      
-      <div className="chat-input-wrapper" style={{ height: inputHeight }}>
+      {/* 主输入区域 */}
+      <div className="input-area" style={{ height }}>
         <textarea
           ref={inputRef}
-          className="chat-input"
-          placeholder="输入消息... (Ctrl+Enter 发送)"
+          className="main-textarea"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleKeyDown}
+          placeholder="输入消息... (Ctrl+Enter 发送)"
           disabled={isStreaming}
+          rows={1}
         />
         
-        <div className="chat-actions-vertical">
-          <div className="action-buttons-top">
+        {/* 右侧垂直按钮组 */}
+        <div className="vertical-actions">
+          <div className="action-group top">
             <TTSControl />
             <VoiceConversationButton 
               onUserSpeech={handleVoiceTranscript}
-              onInterrupt={() => {
-                console.log('[ChatPanel] User interrupted, stopping generation');
-                stopGeneration();
-              }}
+              onInterrupt={stopGeneration}
             />
           </div>
           
-          <div className="action-buttons-bottom">
+          <div className="action-group bottom">
             {isStreaming ? (
               <button 
-                className="btn btn-danger send-btn"
+                className="btn btn-danger action-btn"
                 onClick={stopGeneration}
-                title="停止生成"
+                title="停止"
               >
                 ⏹
               </button>
             ) : (
               <button 
-                className="btn btn-primary send-btn"
+                className="btn btn-primary action-btn"
                 onClick={handleSend}
                 disabled={!inputText.trim()}
-                title="发送消息"
+                title="发送"
               >
                 ➤
               </button>
@@ -143,10 +138,11 @@ export default function ResizableInputArea({
           </div>
         </div>
       </div>
-      
-      <div className="input-hint">
-        <span>Ctrl + Enter 发送</span>
-        <span className="resize-hint">拖拽上方横线调整高度</span>
+
+      {/* 底部提示 */}
+      <div className="input-footer">
+        <span className="hint">{inputText.length} 字符 | Ctrl+Enter 发送</span>
+        <span className="resize-hint">↑ 拖动调整高度</span>
       </div>
     </div>
   );

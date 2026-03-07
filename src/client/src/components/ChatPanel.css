@@ -232,6 +232,47 @@
   50% { opacity: 0; }
 }
 
+/* 语音识别临时消息 */
+.message.voice-transcript {
+  opacity: 0.9;
+  animation: fade-in 0.3s ease;
+}
+
+.message.voice-transcript .message-avatar {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.stt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-color-hover));
+  color: white;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 6px;
+  font-weight: 500;
+  animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 0.9; transform: translateY(0); }
+}
+
 .confidence-indicator {
   font-size: 11px;
   color: var(--text-secondary);
