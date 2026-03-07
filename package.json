@@ -1,7 +1,7 @@
 {
   "name": "viber",
   "version": "1.0.0",
-  "description": "VoIce & Intelligence Backed EditoR - Voice-driven AI code editor"
+  "description": "VoIce & Intelligence Backed EditoR - Voice-driven AI code editor",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",

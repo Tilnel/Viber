@@ -1,6 +1,6 @@
 # viber
 
-**VoIce & Intelligence Backed EditoR**
+**Voice & Intelligence Backed EditoR**
 
 基于语音交互的智能代码编辑器，支持实时双工语音对话、项目文件管理、代码编辑和版本控制。viber 让你用自然语言与 AI 协作编程，实现真正的 "vibe coding" 体验。
 
