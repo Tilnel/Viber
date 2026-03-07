@@ -5,6 +5,8 @@
  * @module services/speaker
  */
 
+import { SpeakerControllerImpl } from './SpeakerControllerImpl.js';
+
 export {
   SpeakerController,
   SpeakTask,

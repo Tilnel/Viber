@@ -14,6 +14,7 @@ import { fileURLToPath } from 'url';
 import { testConnection } from './db/index.js';
 import { setupSocketHandlers } from './socket/index.js';
 import { setupVolcanoSTTSocket } from './routes/volcanoSTT.js';
+import { setupViberSocket } from './socket/setup.js';
 import { errorHandler } from './middleware/error.js';
 import { authMiddleware } from './middleware/auth.js';
 
@@ -112,6 +113,10 @@ app.use('/api/settings', authMiddleware, settingsRoutes);
 // Socket.io setup
 setupSocketHandlers(io);
 setupVolcanoSTTSocket(io);
+
+// Viber Unified WebSocket (Phase 5)
+const viberSocketManager = setupViberSocket(io);
+console.log('[Server] Viber Unified WebSocket initialized');
 
 // Error handling
 app.use(errorHandler);

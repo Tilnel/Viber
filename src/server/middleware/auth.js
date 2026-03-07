@@ -26,3 +26,19 @@ export function authMiddleware(req, res, next) {
 export function generateToken() {
   return AUTH_TOKEN;
 }
+
+// 验证 token（用于 WebSocket）
+export function verifyToken(token) {
+  return new Promise((resolve, reject) => {
+    // 开发环境跳过认证
+    if (process.env.NODE_ENV === 'development' && !process.env.REQUIRE_AUTH) {
+      return resolve({ userId: 'local-user' });
+    }
+    
+    if (token === AUTH_TOKEN) {
+      resolve({ userId: 'local-user' });
+    } else {
+      reject(new Error('Invalid token'));
+    }
+  });
+}

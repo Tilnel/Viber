@@ -134,7 +134,7 @@ export class SpeakerController {
   constructor(config = {}) {
     this.config = {
       maxQueueSize: 10,           // 最大队列长度
-      defaultTTS Engine: 'volcano', // 默认 TTS 引擎
+      defaultTTSEngine: 'volcano', // 默认 TTS 引擎
       enableCache: true,          // 启用缓存
       ...config
     };

@@ -2,7 +2,7 @@
  * Voice Service Index
  * 语音服务索引
  * 
- * @phase 4
+ * @phase 4/5
  */
 
 // Simple Recorder（纯采集，无 VAD）
@@ -24,7 +24,8 @@ export {
   resetSpeakerController
 } from './SpeakerController';
 
-// Voice Socket Service（WebSocket 通信）
+// Voice Socket Service（WebSocket 通信 - Phase 4）
+// 注意：Phase 5 推荐使用 ViberSocket
 export {
   VoiceSocketService,
   VoiceMessageType,
@@ -36,7 +37,7 @@ export {
   resetVoiceSocket
 } from './VoiceSocketService';
 
-// Voice Service（统一入口）
+// Voice Service（统一入口 - Phase 4）
 export {
   VoiceService,
   type VoiceServiceState,
@@ -44,3 +45,15 @@ export {
   getVoiceService,
   resetVoiceService
 } from './VoiceService';
+
+// Viber Unified Socket（统一 WebSocket - Phase 5）
+// 推荐使用此服务替代 VoiceSocketService
+export {
+  ViberSocket,
+  ViberMessageType,
+  type ViberMessage,
+  type ViberSocketOptions,
+  type ConnectionState,
+  getViberSocket,
+  resetViberSocket
+} from '../viberSocket';
