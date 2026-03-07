@@ -94,13 +94,18 @@ export default function VoiceButtonNew({
     }
   }, [startStreaming, stopStreaming]);
 
+  // 调试：检查实际类名
+  const buttonClass = `voice-conversation-btn ${isStreaming ? 'active' : ''}`;
+  console.log('[VoiceButtonNew] Button class:', buttonClass, 'isStreaming:', isStreaming);
+
   return (
     <div className="voice-conversation-wrapper">
       <button
-        className={`voice-conversation-btn ${isStreaming ? 'active' : ''}`}
+        className={buttonClass}
         onClick={toggle}
         disabled={disabled}
         title={isStreaming ? '点击停止' : '点击开始语音'}
+        data-streaming={isStreaming}
       >
         <span className={`voice-icon ${isStreaming ? 'active' : ''}`}>
           {isStreaming ? '🎤' : '🎙️'}
