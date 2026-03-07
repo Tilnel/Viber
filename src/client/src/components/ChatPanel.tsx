@@ -232,6 +232,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
         sessionId,
         content,
         context,
+        abortControllerRef.current?.signal,
         {
           onTextDelta: (text) => {
             assistantContent += text;
