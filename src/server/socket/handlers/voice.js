@@ -6,7 +6,7 @@
  * - RefactoredListener (音频接收)
  * - SpeechDetector (VAD)
  * - ASRService (语音识别)
- * - SpeakerController (TTS 队列)
+ * - VoiceOrchestrator (LLM + TTS)
  * 
  * @phase 5
  */
@@ -18,8 +18,9 @@ import { SpeakerControllerImpl } from '../../services/speaker/index.js';
 
 /**
  * 创建语音处理器
+ * @param {VoiceOrchestrator} voiceOrchestrator - 语音协调器
  */
-export function createVoiceHandlers() {
+export function createVoiceHandlers(voiceOrchestrator) {
   // 初始化服务
   const detector = createDetector({ type: 'volume' });
   const asrService = ASRServiceFactory.create('volcano');
@@ -84,9 +85,17 @@ export function createVoiceHandlers() {
         conn.streams.set(streamId, streamInfo);
       }
       
+      // 创建语音对话上下文（用于后端 LLM + TTS 流程）
+      if (voiceOrchestrator) {
+        voiceOrchestrator.createDialog(streamId, {
+          sessionId,
+          socketId: socket.id,
+          userId: socket.userId
+        });
+      }
+      
       // 设置 ASR 回调
       asrSession.on('interim', (result) => {
-        console.log(`[VoiceHandler] ASR interim: "${result.text}"`);
         socket.emit('message', {
           type: 'voice:asr:interim',
           data: {
@@ -97,8 +106,10 @@ export function createVoiceHandlers() {
       });
       
       asrSession.on('final', (result) => {
-        console.log(`[VoiceHandler] ASR final: "${result.text}", duration: ${result.duration}ms`);
+        console.log(`[VoiceHandler] ASR final: "${result.text}"`);
         streamInfo.transcript = result.text;
+        
+        // 发送给前端显示
         socket.emit('message', {
           type: 'voice:asr:final',
           data: {
@@ -108,8 +119,10 @@ export function createVoiceHandlers() {
           }
         });
         
-        // 注意：这里不自动停止，让用户决定何时停止
-        // 如果需要自动停止，可以在这里调用 stop
+        // 交给 VoiceOrchestrator 处理后端 LLM + TTS 流程
+        if (voiceOrchestrator) {
+          voiceOrchestrator.handleASRResult(streamId, result.text);
+        }
       });
       
       asrSession.on('ended', () => {
@@ -227,6 +240,11 @@ export function createVoiceHandlers() {
         conn.streams.delete(streamId);
       }
       
+      // 清理 VoiceOrchestrator
+      if (voiceOrchestrator) {
+        voiceOrchestrator.endDialog(streamId);
+      }
+      
       socket.emit('message', {
         type: 'voice:stopped',
         data: { streamId }
@@ -243,6 +261,11 @@ export function createVoiceHandlers() {
       
       // 停止所有播放
       speakerController.stop();
+      
+      // 通知 VoiceOrchestrator 打断
+      if (voiceOrchestrator) {
+        voiceOrchestrator.interrupt(streamId);
+      }
       
       // 通知客户端
       socket.emit('message', {

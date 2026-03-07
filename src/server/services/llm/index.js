@@ -19,10 +19,16 @@ export {
 } from './types.js';
 
 export { LLMServiceImpl } from './LLMServiceImpl.js';
+export { KimiLLMService, createKimiLLMService } from './KimiLLMService.js';
 
 /**
  * 工厂函数
  */
-export function createLLMService(config = {}) {
-  return new LLMServiceImpl(config);
+export function createLLMService(type = 'kimi', config = {}) {
+  switch (type) {
+    case 'kimi':
+      return new (KimiLLMService)(config);
+    default:
+      return new LLMServiceImpl(config);
+  }
 }

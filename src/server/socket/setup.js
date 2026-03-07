@@ -9,6 +9,8 @@ import { createViberSocketManager } from './viber.js';
 import { createVoiceHandlers } from './handlers/voice.js';
 import { createTerminalHandlers } from './handlers/terminal.js';
 import { VoiceOrchestrator } from '../services/voice/VoiceOrchestrator.js';
+import { createKimiLLMService } from '../services/llm/index.js';
+import { createVolcanoTTSService } from '../services/tts/index.js';
 
 /**
  * 设置统一的 Viber WebSocket 服务
@@ -17,10 +19,23 @@ export function setupViberSocket(io) {
   // 创建管理器
   const manager = createViberSocketManager(io);
   
+  // 创建 LLM 服务
+  const llmService = createKimiLLMService({
+    apiKey: process.env.KIMI_API_KEY,
+    model: 'kimi-latest'
+  });
+  
+  // 创建 TTS 服务
+  const ttsService = createVolcanoTTSService({
+    appId: process.env.VOLCANO_APP_ID,
+    token: process.env.VOLCANO_ACCESS_TOKEN,
+    voice: 'BV001_streaming'
+  });
+  
   // 创建语音协调器（ASR → LLM → TTS）
   const voiceOrchestrator = new VoiceOrchestrator({
-    llmService: null, // TODO: 初始化 LLMService
-    ttsService: null, // TODO: 初始化 TTSService
+    llmService,
+    ttsService,
     socketManager: manager
   });
   
