@@ -126,6 +126,7 @@ export class VoiceOrchestrator {
     
     let fullResponse = '';
     let ttsBuffer = '';
+    let ttsTriggered = false; // 标记是否触发过 TTS
     
     try {
       await this.chatService.sendMessage(
@@ -152,14 +153,19 @@ export class VoiceOrchestrator {
             });
             
             // 累积足够文本后触发 TTS
+            console.log(`[VoiceOrchestrator] Text delta received, ttsBuffer length: ${ttsBuffer.length}`);
             if (this.shouldTriggerTTS(ttsBuffer)) {
               const ttsText = this.extractTTSText(ttsBuffer);
-              ttsBuffer = ttsBuffer.slice(ttsText.length);
-              
-              console.log(`[VoiceOrchestrator] Triggering TTS for: "${ttsText.substring(0, 50)}..."`);
-              
-              // 异步合成 TTS
-              this.synthesizeAndPlay(streamId, ttsText);
+              if (ttsText) {
+                console.log(`[VoiceOrchestrator] TTS triggered, ttsText: "${ttsText.substring(0, 50)}...", remaining: ${ttsBuffer.length - ttsText.length}`);
+                ttsBuffer = ttsBuffer.slice(ttsText.length);
+                ttsTriggered = true;
+                
+                // 异步合成 TTS（不等待，流式处理）
+                this.synthesizeAndPlay(streamId, ttsText).catch(err => {
+                  console.error(`[VoiceOrchestrator] TTS failed:`, err.message);
+                });
+              }
             }
           },
           
@@ -187,12 +193,16 @@ export class VoiceOrchestrator {
           },
           
           onComplete: async (result) => {
-            console.log(`[VoiceOrchestrator] LLM done for ${streamId}, full response length: ${fullResponse.length}`);
+            console.log(`[VoiceOrchestrator] LLM done for ${streamId}, full response length: ${fullResponse.length}, ttsTriggered: ${ttsTriggered}`);
             
             // 处理剩余 TTS 缓冲
             if (ttsBuffer.trim()) {
               console.log(`[VoiceOrchestrator] Processing remaining TTS buffer: ${ttsBuffer.length} chars`);
               await this.synthesizeAndPlay(streamId, ttsBuffer);
+            } else if (!ttsTriggered && fullResponse.trim()) {
+              // 兜底：如果从未触发过 TTS，朗读全部回复
+              console.log(`[VoiceOrchestrator] TTS fallback - speaking full response: ${fullResponse.length} chars`);
+              await this.synthesizeAndPlay(streamId, fullResponse);
             }
             
             // 通知前端完成
@@ -254,10 +264,10 @@ export class VoiceOrchestrator {
    * 提取适合 TTS 的文本
    */
   extractTTSText(buffer) {
-    // 找到最后一个句子结束位置
-    const match = buffer.match(/^(.*?[。！？.!?\n])/);
+    // 找到第一个句子结束位置（使用非贪婪匹配找到第一个标点）
+    const match = buffer.match(/^.+?[。！？.!?\n]/);
     if (match) {
-      return match[1];
+      return match[0];
     }
     
     // 如果没有标点，返回全部（如果超过 50 字符）
