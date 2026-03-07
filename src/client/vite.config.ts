@@ -1,10 +1,20 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const monacoEditorModule = require('vite-plugin-monaco-editor');
+const monacoEditor = monacoEditorModule.default || monacoEditorModule;
+
+const monacoEditorPlugin = monacoEditor({
+  languageWorkers: ['editorWorkerService', 'typescript', 'json', 'html', 'css']
+});
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
-    react()
+    react(),
+    monacoEditorPlugin
   ],
   server: {
     port: 5173,

@@ -6,10 +6,14 @@ import remarkGfm from 'remark-gfm';
 import { useProjectStore } from '../stores/project';
 import { chatAPI, projectAPI, type StreamEvent } from '../services/api';
 import { useSettingsStore } from '../stores/settings';
-import VoiceConversationButton, { ttsService } from './VoiceConversationButton';
+import { loadVoiceConfig, VoiceConfig } from '../services/voiceConfig';
+import VoiceConversationButton, { piperTTSService } from './VoiceConversationButton';
+import { volcanoTTSService } from '../services/volcanoTTS';
+import TTSControl from './TTSControl';
 import ToolCallBlock from './ToolCallBlock';
 import type { ChatMessage, ChatSession } from '../../../shared/types';
 import './ChatPanel.css';
+import { cleanTextForTTSStreaming } from '../utils/ttsTextCleaner';
 
 // 消息块类型
 interface MessageBlock {
@@ -48,13 +52,68 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
   const [inputText, setInputText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [showSessionMenu, setShowSessionMenu] = useState(false);
+
   
   // 用于流式消息构建的状态
   const [streamingBlocks, setStreamingBlocks] = useState<MessageBlock[]>([]);
   const streamingBlocksRef = useRef<MessageBlock[]>([]);
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 打断标志 - 阻止后续的TTS播放
+  const interruptedRef = useRef(false);
+
+  // 停止生成
+  const stopGeneration = useCallback(() => {
+    console.log('[ChatPanel] stopGeneration called');
+    
+    if (abortControllerRef.current) {
+      console.log('[ChatPanel] Aborting controller');
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // 设置打断标志
+    interruptedRef.current = true;
+    
+    // 停止 TTS
+    console.log('[ChatPanel] Stopping TTS services');
+    piperTTSService.stop();
+    volcanoTTSService.stop();
+    console.log('[ChatPanel] TTS services stopped');
+    
+    // 保存已生成的内容到消息列表
+    if (streamingBlocksRef.current.length > 0) {
+      const finalBlocks = streamingBlocksRef.current.map(block => ({
+        type: block.type,
+        ...(block.type === 'text' 
+          ? { content: block.content }
+          : {
+              id: block.id,
+              operation: block.operation,
+              target: block.target,
+              result: block.result,
+              args: block.args
+            }
+        )
+      }));
+      
+      const assistantMessage: ChatMessage = {
+        id: Date.now() + 1,
+        sessionId: currentSession?.id || 0,
+        role: 'assistant',
+        content: JSON.stringify(finalBlocks),
+        createdAt: new Date().toISOString()
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+    }
+    
+    setIsStreaming(false);
+    setStreamingBlocks([]);
+    streamingBlocksRef.current = [];
+  }, [currentSession]);
 
   // Load messages when session changes
   useEffect(() => {
@@ -64,6 +123,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       setMessages([]);
     }
   }, [currentSession]);
+
+  // Edge TTS 无需初始化
   
   // 页面关闭前保存未完成的回复
   useEffect(() => {
@@ -293,6 +354,31 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
         createdAt: new Date().toISOString()
       }]);
       
+      // 自动朗读 AI 回复（打字输入模式）
+      const voiceConfig = loadVoiceConfig();
+      if (voiceConfig.autoSpeakAIResponse) {
+        const textContent = finalBlocks
+          .filter(b => b.type === 'text')
+          .map(b => b.content)
+          .join('\n');
+        
+        if (textContent.trim()) {
+          const cleanedText = cleanTextForTTSStreaming(textContent, true);
+          if (cleanedText.trim()) {
+            // 根据配置的引擎选择 TTS
+            if (voiceConfig.ttsEngine === 'volcano') {
+              volcanoTTSService.synthesizeStream(cleanedText, {
+                voice: voiceConfig.ttsVoice,
+                speed: voiceConfig.ttsSpeed,
+              });
+            } else if (voiceConfig.ttsEngine === 'piper') {
+              piperTTSService.speakStreaming(cleanedText);
+            }
+            // browser TTS 不支持流式，跳过
+          }
+        }
+      }
+      
       // 清空流式块
       streamingBlocksRef.current = [];
       setStreamingBlocks([]);
@@ -342,24 +428,70 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     }
   };
 
+  // 跟踪正在处理的语音消息，防止重复
+  const processingVoiceRef = useRef<string | null>(null);
+  const processingVoiceTimeRef = useRef<number>(0);
+
   const handleVoiceTranscript = async (transcript: string) => {
+    // 防重复检查
+    const now = Date.now();
+    if (processingVoiceRef.current === transcript && 
+        now - processingVoiceTimeRef.current < 5000) {
+      console.log('[ChatPanel] Duplicate voice transcript, ignoring:', transcript);
+      return;
+    }
+    
     // 语音输入直接发送，不填入输入框
-    if (!transcript.trim() || isStreaming) return;
+    if (!transcript.trim()) {
+      console.log('[ChatPanel] Voice transcript skipped: empty');
+      return;
+    }
+    
+    // 如果正在生成，先停止（打断）
+    if (isStreaming) {
+      console.log('[ChatPanel] Interrupting current generation for new voice input');
+      stopGeneration();
+      // 等待一小段时间确保中断生效
+      await new Promise(r => setTimeout(r, 100));
+    }
+    
+    // 记录正在处理的消息
+    processingVoiceRef.current = transcript;
+    processingVoiceTimeRef.current = now;
     
     if (!currentSession) {
-      // 没有当前 session，提示用户先创建一个
       toast.info('请先创建一个会话');
-      // 自动打开 session 选择菜单
       setShowSessionMenu(true);
       return;
     }
     
+    console.log('[ChatPanel] Processing voice transcript:', transcript);
     const isFirstMessage = messages.length === 0;
     await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
   };
 
+  // AI 回复文本收集（用于语音对话TTS）
+  const [aiResponseForVoice, setAiResponseForVoice] = useState('');
+  const aiResponseForVoiceRef = useRef('');
+
+  // 发送锁，防止并发
+  const isSendingVoiceRef = useRef(false);
+
   // 支持语音输出的消息发送
   const sendMessageWithVoice = async (sessionId: number, content: string, isFirstMessage: boolean = false) => {
+    // 如果有正在进行的请求，先停止
+    if (abortControllerRef.current) {
+      console.log('[ChatPanel] Interrupting previous request for new voice input');
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // 重置打断标志，允许新的TTS播放
+    interruptedRef.current = false;
+    
+    // 重置状态准备新请求
+    isSendingVoiceRef.current = true;
+    
     setIsStreaming(true);
     streamingBlocksRef.current = [];
     setStreamingBlocks([]);
@@ -393,14 +525,21 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     let lastSpeakTime = Date.now();
     const speakInterval = 500; // 每500ms尝试播放一次累积的文本
     
+    // 创建 AbortController 用于停止生成
+    abortControllerRef.current = new AbortController();
+    
     try {
       await chatAPI.sendMessageStream(
         sessionId,
         content,
         context,
+        abortControllerRef.current.signal,
         {
           onTextDelta: (text) => {
             aiResponseText += text;
+            // 收集AI回复用于语音对话TTS
+            aiResponseForVoiceRef.current += text;
+            setAiResponseForVoice(aiResponseForVoiceRef.current);
             
             // 更新UI
             flushSync(() => {
@@ -422,13 +561,14 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
               });
             });
 
-            // 流式TTS播放
+            // 流式TTS播放（仅 Piper 支持流式播放）
+            const voiceConfig = loadVoiceConfig();
             const now = Date.now();
-            if (now - lastSpeakTime > speakInterval && aiResponseText.length > 5) {
+            if (voiceConfig.ttsEngine === 'piper' && now - lastSpeakTime > speakInterval && aiResponseText.length > 5) {
               // 找到合适的断句位置（标点符号）
               const speakText = findSpeakableSegment(aiResponseText);
               if (speakText) {
-                ttsService.speakStreaming(speakText);
+                piperTTSService.speakStreaming(speakText);
                 aiResponseText = aiResponseText.slice(speakText.length);
                 lastSpeakTime = now;
               }
@@ -484,9 +624,26 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           },
           
           onComplete: () => {
-            // 播放剩余的文本
-            if (aiResponseText.trim()) {
-              ttsService.speakStreaming(aiResponseText.trim());
+            // 语音对话模式：触发TTS播放
+            console.log('[ChatPanel] AI response complete for voice:', aiResponseForVoiceRef.current.substring(0, 100));
+            
+            // 检查是否被打断
+            if (interruptedRef.current) {
+              console.log('[ChatPanel] Response was interrupted, skipping TTS');
+              return;
+            }
+            
+            const voiceConfig = loadVoiceConfig();
+            // 播放AI回复（语音对话模式）
+            if (aiResponseText.trim() && !interruptedRef.current) {
+              if (voiceConfig.ttsEngine === 'volcano') {
+                volcanoTTSService.synthesize(aiResponseText.trim(), {
+                  voice: voiceConfig.ttsVoice,
+                  speed: voiceConfig.ttsSpeed,
+                });
+              } else {
+                piperTTSService.speak(aiResponseText.trim());
+              }
             }
             
             // 保存消息到数据库
@@ -518,12 +675,19 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
             setIsStreaming(false);
             setStreamingBlocks([]);
             streamingBlocksRef.current = [];
+            abortControllerRef.current = null;
           },
           
           onError: (error) => {
+            // 如果是中止错误，不显示错误提示（已在中止处理中保存了内容）
+            if (error === 'Request was aborted.' || error?.includes?.('aborted')) {
+              console.log('Stream was aborted by user');
+              return;
+            }
             console.error('Stream error:', error);
             toast.error(`发送消息失败: ${error}`);
             setIsStreaming(false);
+            abortControllerRef.current = null;
           }
         }
       );
@@ -531,6 +695,9 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       console.error('Failed to send message:', error);
       toast.error('发送消息失败');
       setIsStreaming(false);
+    } finally {
+      // 释放发送锁
+      isSendingVoiceRef.current = false;
     }
   };
 
@@ -663,6 +830,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           )}
         </div>
         
+
         <button className="btn btn-icon" onClick={handleNewSession} title="新建会话">
           ✚
         </button>
@@ -764,18 +932,32 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           />
           
           <div className="chat-actions">
+            <TTSControl />
             <VoiceConversationButton 
               onUserSpeech={handleVoiceTranscript}
-              disabled={isStreaming}
-              isAIResponding={isStreaming}
+              onInterrupt={() => {
+                // 用户打断AI回复 - 立即停止生成
+                console.log('[ChatPanel] User interrupted, stopping generation');
+                stopGeneration();
+              }}
             />
-            <button 
-              className="btn btn-primary send-btn"
-              onClick={handleSend}
-              disabled={!inputText.trim() || isStreaming}
-            >
-              {isStreaming ? '...' : '➤'}
-            </button>
+            {isStreaming ? (
+              <button 
+                className="btn btn-danger send-btn"
+                onClick={stopGeneration}
+                title="停止生成"
+              >
+                ⏹
+              </button>
+            ) : (
+              <button 
+                className="btn btn-primary send-btn"
+                onClick={handleSend}
+                disabled={!inputText.trim()}
+              >
+                ➤
+              </button>
+            )}
           </div>
         </div>
         
@@ -783,6 +965,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           Ctrl + Enter 发送
         </div>
       </div>
+
+
     </div>
   );
 }

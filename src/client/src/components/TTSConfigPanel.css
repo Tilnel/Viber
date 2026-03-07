@@ -1,0 +1,331 @@
+/* TTS 配置面板样式 */
+
+.tts-config-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tts-config-panel {
+  background: var(--bg-primary, #ffffff);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 头部 */
+.tts-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+.tts-config-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.close-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-secondary, #666);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--bg-hover, #e8e8e8);
+  color: var(--text-primary, #333);
+}
+
+/* 内容区域 */
+.tts-config-content {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.config-section {
+  margin-bottom: 20px;
+}
+
+.config-section:last-child {
+  margin-bottom: 0;
+}
+
+.config-section label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary, #333);
+  margin-bottom: 10px;
+}
+
+.value-display {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  background: var(--bg-secondary, #f0f0f0);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* 提供商选项 */
+.provider-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.provider-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 2px solid var(--border-color, #e0e0e0);
+  border-radius: 8px;
+  background: var(--bg-primary, #fff);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.provider-btn:hover {
+  border-color: var(--primary-light, #90caf9);
+  background: var(--bg-hover, #f5f5f5);
+}
+
+.provider-btn.active {
+  border-color: var(--primary, #1976d2);
+  background: var(--primary-light, #e3f2fd);
+}
+
+.provider-icon {
+  font-size: 20px;
+}
+
+.provider-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text-primary, #333);
+}
+
+.provider-desc {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
+
+/* 音色选择 */
+.voice-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
+  font-size: 14px;
+  color: var(--text-primary, #333);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.voice-select:focus {
+  outline: none;
+  border-color: var(--primary, #1976d2);
+}
+
+.voice-info {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.quality-badge,
+.lang-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-secondary, #f0f0f0);
+  color: var(--text-secondary, #666);
+}
+
+.quality-badge {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+/* 滑块 */
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-secondary, #e0e0e0);
+  outline: none;
+  -webkit-appearance: none;
+  margin: 8px 0;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary, #1976d2);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--primary, #1976d2);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  margin-top: 4px;
+}
+
+/* 测试按钮 */
+.test-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.test-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.test-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.test-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.test-btn.testing {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.play-icon,
+.stop-icon {
+  font-size: 12px;
+}
+
+/* 底部按钮 */
+.tts-config-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-secondary, #f5f5f5);
+}
+
+.save-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary, #1976d2);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.save-btn:hover {
+  background: var(--primary-dark, #1565c0);
+}
+
+/* 深色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .tts-config-panel {
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #252526;
+    --bg-hover: #2d2d30;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --border-color: #3e3e42;
+    --primary: #4fc3f7;
+    --primary-light: #1e3a5f;
+    --primary-dark: #29b6f6;
+  }
+  
+  .quality-badge {
+    background: #1b5e20;
+    color: #81c784;
+  }
+}

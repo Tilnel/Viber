@@ -132,6 +132,9 @@ router.post('/open', async (req, res, next) => {
     
     const project = rows[0];
     
+    // 设置项目的根目录为实际的项目路径（使用绝对路径）
+    setProjectRootDir(project.id, absolutePath);
+    
     // 加载项目会话列表
     const { rows: sessions } = await query(`
       SELECT id, name, created_at, updated_at, message_count, is_archived

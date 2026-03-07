@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
-import { getPathSecurity } from '../utils/pathSecurity.js';
+import { getPathSecurity, getPathSecurityOrNull } from '../utils/pathSecurity.js';
 
 // 检测文件是否为二进制文件
 async function isBinaryFile(filePath) {
@@ -61,6 +61,25 @@ async function isBinaryFile(filePath) {
 }
 
 const router = Router();
+
+// 中间件：检查项目是否已初始化（服务器重启后需要重新 openProject）
+router.use((req, res, next) => {
+  const projectId = req.query.projectId || req.body?.projectId;
+  
+  // 如果有 projectId，检查是否已初始化
+  if (projectId) {
+    const pathSecurity = getPathSecurityOrNull(projectId);
+    if (!pathSecurity) {
+      return res.status(409).json({
+        error: 'Project not initialized',
+        message: 'Server restarted, please reopen the project',
+        code: 'PROJECT_NOT_INITIALIZED'
+      });
+    }
+  }
+  
+  next();
+});
 
 // 辅助函数：从请求中获取 projectId 和对应的 PathSecurity 实例
 function getProjectContext(req) {

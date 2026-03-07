@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from './stores/settings';
+import { useProjectStore } from './stores/project';
 import HomePage from './pages/HomePage';
 import ProjectPage from './pages/ProjectPage';
 import SettingsPage from './pages/SettingsPage';
@@ -30,15 +31,51 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   const { settings, loadSettings } = useSettingsStore();
+  const { currentProject, loadProject } = useProjectStore();
+  const [isRestoring, setIsRestoring] = useState(true);
   
   useEffect(() => {
     loadSettings();
+  }, []);
+  
+  // 恢复之前的项目状态
+  useEffect(() => {
+    const restoreProject = async () => {
+      // 从持久化存储中恢复（zustand persist 会自动恢复，但我们需要重新加载项目数据）
+      const state = JSON.parse(localStorage.getItem('kimi-project-store') || '{}');
+      const savedProject = state?.state?.currentProject;
+      
+      if (savedProject?.id && !currentProject) {
+        try {
+          await loadProject(savedProject.id);
+        } catch (error) {
+          console.error('Failed to restore project:', error);
+        }
+      }
+      setIsRestoring(false);
+    };
+    
+    restoreProject();
   }, []);
   
   // Apply theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', settings.theme);
   }, [settings.theme]);
+  
+  // 恢复项目时显示加载状态
+  if (isRestoring) {
+    return (
+      <div className="app-loading" style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        height: '100vh'
+      }}>
+        <span>加载中...</span>
+      </div>
+    );
+  }
   
   return (
     <div className="app">

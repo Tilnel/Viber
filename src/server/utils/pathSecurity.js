@@ -115,14 +115,39 @@ export function getPathSecurity(projectId, rootDir) {
     return defaultPathSecurity;
   }
   
+  // 统一将 projectId 转换为字符串
+  const projectIdKey = String(projectId);
+  
   // 如果该项目的实例不存在，创建一个新的
-  if (!projectPathSecurityMap.has(projectId)) {
+  if (!projectPathSecurityMap.has(projectIdKey)) {
+    // 如果没有提供 rootDir，使用默认根目录
     const instance = new PathSecurity(rootDir || DEFAULT_ROOT_DIR);
-    projectPathSecurityMap.set(projectId, instance);
-    console.log(`🔒 PathSecurity created for project ${projectId}: ${instance.rootDir}`);
+    projectPathSecurityMap.set(projectIdKey, instance);
+    console.log(`🔒 PathSecurity created for project ${projectIdKey}: ${instance.rootDir}`);
   }
   
-  return projectPathSecurityMap.get(projectId);
+  return projectPathSecurityMap.get(projectIdKey);
+}
+
+/**
+ * 检查项目是否有已初始化的 PathSecurity 实例
+ * @param {string} projectId - 项目ID
+ * @returns {boolean}
+ */
+export function hasPathSecurity(projectId) {
+  if (!projectId) return false;
+  return projectPathSecurityMap.has(String(projectId));
+}
+
+/**
+ * 获取项目的 PathSecurity 实例（如果不存在则返回 null）
+ * 用于检测服务器重启后是否需要前端重新初始化
+ * @param {string} projectId - 项目ID
+ * @returns {PathSecurity | null} PathSecurity 实例或 null
+ */
+export function getPathSecurityOrNull(projectId) {
+  if (!projectId) return null;
+  return projectPathSecurityMap.get(String(projectId)) || null;
 }
 
 /**
@@ -131,9 +156,18 @@ export function getPathSecurity(projectId, rootDir) {
  * @param {string} rootDir - 项目根目录
  */
 export function setProjectRootDir(projectId, rootDir) {
-  const instance = getPathSecurity(projectId, rootDir);
-  instance.setRootDir(rootDir);
-  console.log(`🔒 Root directory updated for project ${projectId}: ${rootDir}`);
+  if (!projectId || !rootDir) {
+    throw new Error('projectId and rootDir are required');
+  }
+  
+  // 统一将 projectId 转换为字符串
+  const projectIdKey = String(projectId);
+  
+  // 创建或更新实例
+  const instance = new PathSecurity(rootDir);
+  projectPathSecurityMap.set(projectIdKey, instance);
+  
+  console.log(`🔒 Root directory set for project ${projectIdKey}: ${rootDir}`);
 }
 
 /**
@@ -141,9 +175,13 @@ export function setProjectRootDir(projectId, rootDir) {
  * @param {string} projectId - 项目ID
  */
 export function clearPathSecurity(projectId) {
-  if (projectId && projectPathSecurityMap.has(projectId)) {
-    projectPathSecurityMap.delete(projectId);
-    console.log(`🔒 PathSecurity cleared for project ${projectId}`);
+  if (projectId) {
+    // 统一将 projectId 转换为字符串
+    const projectIdKey = String(projectId);
+    if (projectPathSecurityMap.has(projectIdKey)) {
+      projectPathSecurityMap.delete(projectIdKey);
+      console.log(`🔒 PathSecurity cleared for project ${projectIdKey}`);
+    }
   }
 }
 

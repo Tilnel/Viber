@@ -326,6 +326,17 @@ export default function CodeEditor() {
                 indentation: true
               }
             }}
+            beforeMount={(monaco) => {
+              // 配置 TypeScript/JavaScript 诊断，避免 worker 错误
+              monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+                noSemanticValidation: true,
+                noSyntaxValidation: false
+              });
+              monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+                noSemanticValidation: true,
+                noSyntaxValidation: false
+              });
+            }}
           />
         )}
       </div>

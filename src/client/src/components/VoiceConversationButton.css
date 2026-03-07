@@ -3,6 +3,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  position: relative;
 }
 
 .voice-conversation-button {
@@ -146,6 +147,8 @@
   padding: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   animation: slide-in 0.3s ease;
+  pointer-events: auto;
+  z-index: 100;
 }
 
 @keyframes slide-in {
@@ -239,6 +242,32 @@
 .hint.interrupt {
   color: #3b82f6;
   font-weight: 500;
+}
+
+/* 按钮行 */
+.voice-button-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-settings-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.2s ease;
+}
+
+.voice-settings-toggle:hover {
+  background: var(--bg-secondary);
+  transform: scale(1.05);
 }
 
 /* 暗黑模式适配 */

@@ -43,3 +43,22 @@ coverage/
 # Cache
 .cache/
 *.cache
+
+# Test files
+test-*.js
+test-*.txt
+
+# Uploads and data
+uploads/
+data/
+*.db-journal
+
+# Audio cache
+*.wav
+*.mp3
+*.ogg
+*.pcm
+
+# Model files
+*.onnx
+*.bin

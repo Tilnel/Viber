@@ -1,0 +1,74 @@
+.voice-button-2 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+}
+
+.voice-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #4a9eff;
+  color: white;
+  box-shadow: 0 4px 12px rgba(74, 158, 255, 0.3);
+}
+
+.voice-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(74, 158, 255, 0.4);
+}
+
+.voice-btn.active {
+  background: #ff4757;
+  animation: pulse 1.5s infinite;
+}
+
+.voice-btn.recording {
+  background: #2ed573;
+}
+
+.voice-btn.processing,
+.voice-btn.speaking {
+  background: #ffa502;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.voice-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.voice-status .state {
+  font-weight: 600;
+  color: #333;
+}
+
+.voice-status .transcript {
+  color: #4a9eff;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-response {
+  max-width: 400px;
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+}

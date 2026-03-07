@@ -105,6 +105,18 @@ const migrations = [
         ('git.commit', 'Ctrl+Enter')
       ON CONFLICT DO NOTHING;
     `
+  },
+  {
+    version: 2,
+    name: 'Add voice settings fields',
+    sql: `
+      -- 添加 TTS 和 VAD 设置字段
+      ALTER TABLE settings 
+        ADD COLUMN IF NOT EXISTS tts_engine VARCHAR(20) DEFAULT 'volcano',
+        ADD COLUMN IF NOT EXISTS tts_voice VARCHAR(50) DEFAULT 'BV001_streaming',
+        ADD COLUMN IF NOT EXISTS vad_threshold REAL DEFAULT 0.025,
+        ADD COLUMN IF NOT EXISTS vad_silence_timeout INTEGER DEFAULT 2000;
+    `
   }
 ];
 

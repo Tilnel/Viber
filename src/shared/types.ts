@@ -134,6 +134,12 @@ export interface Settings {
   voiceOutputDevice?: string;
   voiceLanguage: string;
   voiceSpeed: number;
+  // TTS 音色设置
+  ttsEngine: 'volcano' | 'piper' | 'browser';
+  ttsVoice: string;
+  // VAD 设置
+  vadThreshold: number;
+  vadSilenceTimeout: number;
   defaultModel: string;
   contextWindow: number;
   rootDirectory: string;

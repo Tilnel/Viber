@@ -10,14 +10,35 @@ import type {
 
 const API_BASE = '/api';
 
+// 重新初始化项目的函数（由外部设置）
+let reinitializeProject: (() => Promise<void>) | null = null;
+export function setReinitializeHandler(handler: () => Promise<void>) {
+  reinitializeProject = handler;
+}
+
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers
+  const doFetch = async (): Promise<Response> => {
+    return fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers
+      }
+    });
+  };
+  
+  let response = await doFetch();
+  
+  // 处理 409 错误（项目未初始化 - 服务器重启）
+  if (response.status === 409) {
+    const errorData = await response.json().catch(() => ({ code: '' }));
+    if (errorData.code === 'PROJECT_NOT_INITIALIZED' && reinitializeProject) {
+      console.log('[API] Server restarted, reinitializing project...');
+      await reinitializeProject();
+      // 重试请求
+      response = await doFetch();
     }
-  });
+  }
   
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Unknown error' }));
@@ -160,19 +181,21 @@ export const chatAPI = {
     sessionId: number,
     content: string,
     context?: { currentFile?: string; selectedCode?: string },
+    signal?: AbortSignal,
     handlers?: {
       onTextDelta?: (text: string) => void;
       onToolCall?: (tool: { id: string; name: string; args: Record<string, any> }) => void;
       onToolResult?: (result: { id: string; name: string; args: Record<string, any>; content: string }) => void;
       onError?: (message: string) => void;
-      onDone?: () => void;
+      onComplete?: () => void;
     }
   ): Promise<void> => {
     return new Promise((resolve, reject) => {
       fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, context })
+        body: JSON.stringify({ content, context }),
+        signal
       }).then(response => {
         if (!response.ok) {
           reject(new Error(`HTTP ${response.status}`));
@@ -231,7 +254,7 @@ export const chatAPI = {
                     handlers?.onError?.(event.message || 'Unknown error');
                     break;
                   case 'done':
-                    handlers?.onDone?.();
+                    handlers?.onComplete?.();
                     break;
                 }
               } catch (err) {
@@ -256,7 +279,7 @@ export const chatAPI = {
     onChunk?: (chunk: string) => void
   ): Promise<void> => {
     let fullText = '';
-    return chatAPI.sendMessageStream(sessionId, content, context, {
+    return chatAPI.sendMessageStream(sessionId, content, context, undefined, {
       onTextDelta: (text) => {
         fullText += text;
         onChunk?.(fullText);

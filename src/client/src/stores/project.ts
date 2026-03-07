@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { projectAPI, fsAPI, setProjectStoreRef } from '../services/api';
+import { projectAPI, fsAPI, setProjectStoreRef, setReinitializeHandler } from '../services/api';
 import type { Project, ChatSession, FileNode, OpenFile } from '../../../shared/types';
 
 // 从 localStorage 恢复展开状态（按项目）
@@ -133,7 +133,9 @@ interface ProjectState {
   getFileScrollPosition: (filePath: string) => number;
 }
 
-export const useProjectStore = create<ProjectState>((set, get) => ({
+export const useProjectStore = create<ProjectState>()(
+  persist(
+    (set, get) => ({
   // Project
   currentProject: null,
   isLoading: false,
@@ -247,6 +249,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   fileTreeScrollTop: 0,
   
   loadDirectory: async (path, isRefresh = false) => {
+    const { currentProject } = get();
+    // 如果没有当前项目，不加载目录
+    if (!currentProject) {
+      console.warn('Cannot load directory: no project loaded');
+      return;
+    }
+    
     try {
       const data = await fsAPI.listDirectory(path);
       
@@ -322,8 +331,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   
   refreshFileTree: async () => {
+    const { currentProject, expandedDirs } = get();
+    // 如果没有当前项目，不刷新
+    if (!currentProject) {
+      console.warn('Cannot refresh file tree: no project loaded');
+      return;
+    }
+    
     try {
-      const { expandedDirs } = get();
       
       // 先刷新根目录（不保留旧 children，获取最新状态）
       await get().loadDirectory('.', true);
@@ -509,10 +524,38 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
     return 0;
   }
-}));
+}),
+{
+  name: 'kimi-project-store',
+  partialize: (state) => ({ 
+    currentProject: state.currentProject,
+    // 不持久化这些 transient 状态
+    // isLoading, fileTree, expandedDirs 等会在加载项目时重新初始化
+  }),
+}
+)
+);
 
 // 设置 store 引用供 API 使用
 setProjectStoreRef(() => useProjectStore.getState());
+
+// 设置重新初始化处理函数（服务器重启后自动重新打开项目）
+setReinitializeHandler(async () => {
+  const state = useProjectStore.getState();
+  const { currentProject } = state;
+  
+  if (currentProject?.id) {
+    console.log('[ProjectStore] Reinitializing project after server restart:', currentProject.id);
+    try {
+      // 重新调用 openProject 来设置服务器端的 PathSecurity
+      await projectAPI.openProject(currentProject.path);
+      console.log('[ProjectStore] Project reinitialized successfully');
+    } catch (error) {
+      console.error('[ProjectStore] Failed to reinitialize project:', error);
+      throw error;
+    }
+  }
+});
 
 function getLanguageFromPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();

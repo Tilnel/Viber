@@ -21,6 +21,10 @@ const defaultSettings: Settings = {
   voiceEnabled: true,
   voiceLanguage: 'zh-CN',
   voiceSpeed: 1.0,
+  ttsEngine: 'volcano',
+  ttsVoice: 'BV001_streaming',
+  vadThreshold: 0.025,
+  vadSilenceTimeout: 2000,
   defaultModel: 'kimi-latest',
   contextWindow: 10,
   rootDirectory: '/path/to/your/code'

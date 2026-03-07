@@ -1,81 +1,108 @@
-// 实时双向语音对话管理器
-// 支持：VAD自动检测、流式识别、打断机制
+// 实时双向语音对话管理器 - 简化版
+// 核心原则：任何时候检测到用户说话，立即停止一切并监听
 
-import { ttsService, TTSOptions } from './tts';
+import { piperTTSService, PiperTTSOptions } from './piperTTS';
+import { volcanoTTSService } from './volcanoTTS';
+import { VolcanoSTTService } from './volcanoSTT';
+import { cleanTextForTTSStreaming } from '../utils/ttsTextCleaner';
+import { VoiceConfig, loadVoiceConfig, TTSEngine, STTEngine, volcanoVoices } from './voiceConfig';
+import { useSettingsStore } from '../stores/settings';
 
-export type VoiceConversationState = 
-  | 'idle'           // 空闲
-  | 'listening'      // 正在听（VAD检测中）
-  | 'processing'     // 处理中（发送给AI）
-  | 'speaking'       // AI正在说话
-  | 'error';         // 错误
+export type VoiceConversationState = 'idle' | 'listening' | 'processing' | 'speaking';
 
 export interface VoiceConversationOptions {
-  // VAD设置
-  silenceThreshold?: number;    // 静音阈值 (0-1), default 0.02
-  silenceTimeout?: number;      // 静音多久认为说话结束(ms), default 1500
-  minSpeechDuration?: number;   // 最小说话时长(ms), default 300
-  
-  // TTS设置
-  ttsOptions?: TTSOptions;
-  
-  // 回调
+  silenceThreshold?: number;
+  silenceTimeout?: number;
+  minSpeechDuration?: number;
+  voiceConfig?: VoiceConfig;
+  ttsOptions?: PiperTTSOptions;
   onStateChange?: (state: VoiceConversationState) => void;
   onTranscript?: (text: string, isFinal: boolean) => void;
   onError?: (error: string) => void;
   onUserSpeechStart?: () => void;
   onUserSpeechEnd?: (text: string) => void;
+  onInterrupt?: () => void; // 新增：打断回调
   onAIResponse?: (text: string) => void;
   onAIResponseComplete?: () => void;
 }
 
 export class VoiceConversation {
-  private recognition: SpeechRecognition | null = null;
-  private mediaRecorder: MediaRecorder | null = null;
+  private volcanoSTT: VolcanoSTTService | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private microphone: MediaStreamAudioSourceNode | null = null;
-  
+
   private state: VoiceConversationState = 'idle';
   private options: VoiceConversationOptions;
-  
+  private config: VoiceConfig;
+  private ttsEngine: TTSEngine = 'volcano';
+  private sttEngine: STTEngine = 'volcano';
+
   // VAD状态
   private isSpeechDetected = false;
   private silenceStartTime = 0;
   private speechStartTime = 0;
   private vadFrameId: number | null = null;
-  
-  // 识别结果
+  private isListening = false; // 是否正在监听（独立于state）
+
+  // 转录结果
   private currentTranscript = '';
   private interimTranscript = '';
+  private sttResultReceived = false; // 标记是否收到STT最终结果
+
+  // 防止重复发送同一段语音
+  private lastSentText = '';
+  private lastSentTime = 0;
+  private readonly DEBOUNCE_TIME = 3000;
+
+  // 打断标志
+  private interruptRequested = false;
   
-  // 打断检测
-  private isInterrupted = false;
+  // 语音结束处理超时
+  private speechEndTimeout: NodeJS.Timeout | null = null;
 
   constructor(options: VoiceConversationOptions = {}) {
     this.options = {
       silenceThreshold: 0.02,
-      silenceTimeout: 1500,
-      minSpeechDuration: 300,
-      ...options
+      silenceTimeout: 2000, // 2秒静音认为结束
+      minSpeechDuration: 400,
+      ...options,
     };
+    this.config = options.voiceConfig || loadVoiceConfig();
+    this.ttsEngine = this.config.ttsEngine;
+    this.sttEngine = this.config.sttEngine;
+  }
+
+  // 获取 AnalyserNode 用于音量可视化
+  getAnalyser(): AnalyserNode | null {
+    return this.analyser;
+  }
+
+  // 更新 VAD 阈值
+  setThreshold(threshold: number): void {
+    console.log('[VoiceConversation] Updating threshold:', threshold);
+    this.options.silenceThreshold = threshold;
   }
 
   // 初始化
   async initialize(): Promise<boolean> {
     try {
-      // 检查浏览器支持
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        throw new Error('浏览器不支持语音识别');
-      }
-
-      // 请求麦克风权限并设置VAD
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      await this.setupVAD(stream);
-
-      // 初始化语音识别
-      this.setupRecognition();
-
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
+      });
+      
+      this.audioContext = new AudioContext({ sampleRate: 16000 });
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 512; // 更大的采样窗口
+      
+      this.microphone = this.audioContext.createMediaStreamSource(stream);
+      this.microphone.connect(this.analyser);
+      
       return true;
     } catch (error) {
       console.error('[VoiceConversation] Init error:', error);
@@ -84,41 +111,133 @@ export class VoiceConversation {
     }
   }
 
-  // 设置VAD (基于音量的简单VAD)
-  private async setupVAD(stream: MediaStream) {
-    this.audioContext = new AudioContext();
-    this.analyser = this.audioContext.createAnalyser();
-    this.analyser.fftSize = 256;
+  // 开始对话
+  async start(): Promise<void> {
+    if (this.isListening) return;
     
-    this.microphone = this.audioContext.createMediaStreamSource(stream);
-    this.microphone.connect(this.analyser);
-
-    // 启动VAD检测循环
+    console.log('[VoiceConversation] Starting voice conversation');
+    this.isListening = true;
+    this.interruptRequested = false;
+    this.setState('listening');
+    
+    // 启动STT
+    await this.startSTT();
+    
+    // 启动VAD
     this.startVADLoop();
   }
 
+  // 启动STT
+  private async startSTT(): Promise<void> {
+    // 如果STT已存在且运行中，不要重新创建连接
+    if (this.volcanoSTT) {
+      console.log('[VoiceConversation] STT already exists, reusing connection');
+      return;
+    }
+
+    this.volcanoSTT = new VolcanoSTTService({
+      onText: (text, isFinal) => {
+        if (!this.isListening) return;
+        
+        if (isFinal && text.trim()) {
+          console.log('[VoiceConversation] STT final:', text);
+          this.currentTranscript = text;
+          this.sttResultReceived = true;
+          this.options.onTranscript?.(text, true);
+          
+          // 如果语音已经结束但还在等结果，现在处理
+          if (!this.isSpeechDetected && this.speechEndTimeout) {
+            console.log('[VoiceConversation] STT result arrived after speech end, processing now');
+            clearTimeout(this.speechEndTimeout);
+            this.speechEndTimeout = null;
+            this.processSpeechText(text);
+          }
+        } else {
+          this.interimTranscript = text;
+          this.options.onTranscript?.(text, false);
+        }
+      },
+      onError: (error) => {
+        console.error('[VoiceConversation] STT error:', error);
+      },
+      onDisconnected: () => {
+        console.log('[VoiceConversation] STT disconnected, will restart on next speech');
+        this.volcanoSTT = null;
+      },
+    });
+
+    await this.volcanoSTT.start();
+    console.log('[VoiceConversation] STT started');
+  }
+
+  // TTS播放中标志（用于防止自激）
+  private isTTSSpeaking = false;
+
   // VAD检测循环
-  private startVADLoop() {
+  private startVADLoop(): void {
     if (!this.analyser) return;
 
     const bufferLength = this.analyser.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
-    
+    let consecutiveSpeechFrames = 0;
+    let consecutiveSilenceFrames = 0;
+    const SPEECH_THRESHOLD = 2; // 连续2帧检测到语音才认为开始说话（更灵敏）
+    const SILENCE_THRESHOLD = 120; // 连续120帧静音才认为结束（约2秒，容忍连续说话中的停顿）
+
     const checkVolume = () => {
-      if (!this.analyser) return;
+      if (!this.analyser || !this.isListening) return;
 
       this.analyser.getByteFrequencyData(dataArray);
-      
-      // 计算平均音量
+
       let sum = 0;
       for (let i = 0; i < bufferLength; i++) {
         sum += dataArray[i];
       }
-      const average = sum / bufferLength / 255; // 归一化到0-1
+      const average = sum / bufferLength / 255;
+      const threshold = this.options.silenceThreshold || 0.02;
 
-      this.handleVAD(average);
+      // 检测到语音
+      // TTS播放时：轻微提高阈值防止自激，但更容易打断
+      const effectiveThreshold = this.isTTSSpeaking ? threshold * 1.2 : threshold;
+      
+      if (average > effectiveThreshold) {
+        consecutiveSilenceFrames = 0;
+        consecutiveSpeechFrames++;
+        
+        if (consecutiveSpeechFrames >= SPEECH_THRESHOLD && !this.isSpeechDetected) {
+          this.isSpeechDetected = true;
+          this.speechStartTime = Date.now();
+          this.silenceStartTime = 0;
+          consecutiveSpeechFrames = 0;
+          
+          console.log('[VoiceConversation] Speech START detected', this.isTTSSpeaking ? '(during TTS)' : '');
+          
+          // 关键：立即停止一切并准备听新的话（异步处理）
+          this.handleSpeechStart();
+        }
+      } else {
+        // 检测到静音
+        consecutiveSpeechFrames = 0;
+        
+        if (this.isSpeechDetected) {
+          consecutiveSilenceFrames++;
+          
+          if (consecutiveSilenceFrames >= SILENCE_THRESHOLD) {
+            const speechDuration = Date.now() - this.speechStartTime;
+            const minDuration = this.options.minSpeechDuration || 400;
+            
+            if (speechDuration >= minDuration) {
+              console.log('[VoiceConversation] Speech END detected, duration:', speechDuration);
+              this.handleSpeechEnd();
+            }
+            
+            this.isSpeechDetected = false;
+            consecutiveSilenceFrames = 0;
+          }
+        }
+      }
 
-      if (this.state !== 'idle') {
+      if (this.isListening) {
         this.vadFrameId = requestAnimationFrame(checkVolume);
       }
     };
@@ -126,223 +245,224 @@ export class VoiceConversation {
     this.vadFrameId = requestAnimationFrame(checkVolume);
   }
 
-  // 处理VAD逻辑
-  private handleVAD(volume: number) {
-    const now = Date.now();
-    const threshold = this.options.silenceThreshold || 0.02;
-    const silenceTimeout = this.options.silenceTimeout || 1500;
-    const minDuration = this.options.minSpeechDuration || 300;
-
-    if (volume > threshold) {
-      // 检测到声音
-      if (!this.isSpeechDetected) {
-        // 开始说话
-        this.isSpeechDetected = true;
-        this.speechStartTime = now;
-        this.silenceStartTime = 0;
-        
-        // 打断AI说话
-        if (this.state === 'speaking') {
-          this.interrupt();
-        }
-        
-        this.setState('listening');
-        this.options.onUserSpeechStart?.();
-        console.log('[VAD] Speech started');
-      }
-    } else {
-      // 静音
-      if (this.isSpeechDetected) {
-        if (this.silenceStartTime === 0) {
-          this.silenceStartTime = now;
-        }
-        
-        const silenceDuration = now - this.silenceStartTime;
-        const speechDuration = now - this.speechStartTime;
-        
-        // 静音超过阈值，认为说话结束
-        if (silenceDuration > silenceTimeout && speechDuration > minDuration) {
-          this.isSpeechDetected = false;
-          this.handleSpeechEnd();
-        }
-      }
+  // 处理语音开始
+  private handleSpeechStart(): void {
+    // 1. 立即停止TTS
+    console.log('[VoiceConversation] Calling stopTTS');
+    this.stopTTS();
+    
+    // 2. 通知父组件打断
+    if (this.state !== 'idle' && this.state !== 'listening') {
+      console.log('[VoiceConversation] Calling onInterrupt');
+      this.interruptRequested = true;
+      this.options.onInterrupt?.();
     }
+    
+    // 3. 设置状态
+    this.setState('listening');
+    
+    // 4. 关键：保持STT连接，不要重启！
+    // 重启会导致音频流中断，丢失开头的字
+    if (!this.volcanoSTT) {
+      console.log('[VoiceConversation] STT not running, starting it');
+      this.startSTT();
+    } else {
+      console.log('[VoiceConversation] STT already running, keeping connection');
+    }
+    
+    // 5. 通知 STT 开始录音（会发送预缓冲音频，防止漏掉开头）
+    this.volcanoSTT?.startRecording();
+    
+    // 6. 清空上一句的转录结果，准备接收新的
+    // 注意：这里清空的是上一句的结果，但 STT 服务器会继续返回新结果
+    this.currentTranscript = '';
+    this.interimTranscript = '';
+    this.sttResultReceived = false;
+    
+    // 7. 通知外部
+    this.options.onUserSpeechStart?.();
   }
 
-  // 设置语音识别
-  private setupRecognition() {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    this.recognition = new SpeechRecognitionAPI();
+  // 立即打断 - 停止所有输出（供外部调用，不重建STT）
+  private immediateInterrupt(): void {
+    console.log('[VoiceConversation] Immediate interrupt, state:', this.state);
     
-    this.recognition.continuous = true;
-    this.recognition.interimResults = true;
-    this.recognition.lang = 'zh-CN';
-
-    this.recognition.onresult = (event) => {
-      let interim = '';
-      let final = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript;
-        } else {
-          interim += transcript;
-        }
-      }
-
-      if (final) {
-        this.currentTranscript += final;
-      }
-      this.interimTranscript = interim;
-
-      // 通知实时转录
-      const fullText = this.currentTranscript + this.interimTranscript;
-      this.options.onTranscript?.(fullText, final !== '');
-    };
-
-    this.recognition.onerror = (event) => {
-      console.error('[SpeechRecognition] Error:', event.error);
-      if (event.error !== 'no-speech') {
-        this.options.onError?.(event.error);
-      }
-    };
-
-    this.recognition.onend = () => {
-      // 自动重启（除非处于idle状态）
-      if (this.state !== 'idle') {
-        try {
-          this.recognition?.start();
-        } catch {
-          // ignore
-        }
-      }
-    };
+    // 1. 立即停止TTS
+    this.stopTTS();
+    
+    // 2. 通知父组件打断
+    if (this.state !== 'idle' && this.state !== 'listening') {
+      this.interruptRequested = true;
+      this.options.onInterrupt?.();
+    }
+    
+    // 3. 设置状态
+    this.setState('listening');
   }
 
   // 处理说话结束
-  private handleSpeechEnd() {
-    const text = this.currentTranscript.trim();
-    console.log('[VAD] Speech ended:', text);
+  private handleSpeechEnd(): void {
+    // 等待尾音音频传输到服务器后再 finalize（避免尾音丢失）
+    console.log('[VoiceConversation] Waiting for trailing audio to arrive...');
     
-    if (text) {
-      this.options.onUserSpeechEnd?.(text);
-    }
-
-    // 重置转录
-    this.currentTranscript = '';
-    this.interimTranscript = '';
+    setTimeout(() => {
+      // 触发STT finalize，让后端返回最终结果（保持连接）
+      console.log('[VoiceConversation] Finalizing STT for current utterance');
+      this.volcanoSTT?.finalize();
+      
+      // 如果已经收到STT结果，立即处理
+      if (this.sttResultReceived && this.currentTranscript.trim()) {
+        this.processSpeechText(this.currentTranscript);
+        return;
+      }
+      
+      // 否则等待STT结果（最多等2秒，给后端足够时间返回最终结果）
+      console.log('[VoiceConversation] Waiting for STT result...');
+      this.speechEndTimeout = setTimeout(() => {
+        this.speechEndTimeout = null;
+        const text = this.currentTranscript.trim();
+        
+        if (text) {
+          this.processSpeechText(text);
+        } else {
+          console.log('[VoiceConversation] STT result timeout, no text');
+        }
+      }, 2000);
+    }, 500);  // 500ms 延迟，确保尾音音频到达服务器
   }
 
-  // 开始对话
-  start() {
-    if (this.state !== 'idle') return;
+  // 处理识别到的语音文本
+  private processSpeechText(text: string): void {
+    // 检查是否重复
+    const now = Date.now();
+    if (text === this.lastSentText && now - this.lastSentTime < this.DEBOUNCE_TIME) {
+      console.log('[VoiceConversation] Duplicate speech, ignoring:', text);
+      this.resetForNextSpeech();
+      return;
+    }
+
+    // 记录发送的文本
+    this.lastSentText = text;
+    this.lastSentTime = now;
     
-    this.setState('listening');
-    this.recognition?.start();
-    this.startVADLoop();
+    console.log('[VoiceConversation] Sending speech:', text);
+    
+    // 发送给用户
+    this.setState('processing');
+    this.options.onUserSpeechEnd?.(text);
+    
+    // 重置准备下一句
+    this.resetForNextSpeech();
+  }
+
+  // 重置状态准备下一句
+  private resetForNextSpeech(): void {
+    this.currentTranscript = '';
+    this.interimTranscript = '';
+    this.sttResultReceived = false;
+    
+    // 关键：停止录音（进入预缓冲模式），但保持连接！
+    // 这样可以确保下一句开头不会丢失，同时STT连接保持
+    console.log('[VoiceConversation] Reset for next speech, stop recording but keep STT connection');
+    this.volcanoSTT?.stopRecording();
+  }
+
+  // 设置状态
+  private setState(state: VoiceConversationState): void {
+    if (this.state === state) return;
+    console.log('[VoiceConversation] State:', this.state, '->', state);
+    this.state = state;
+    this.options.onStateChange?.(state);
+  }
+
+  // 停止 TTS
+  private stopTTS(): void {
+    console.log('[VoiceConversation] Stopping TTS, engine:', this.ttsEngine);
+    if (this.ttsEngine === 'volcano') {
+      volcanoTTSService.stop();
+    } else {
+      piperTTSService.stop();
+    }
+    console.log('[VoiceConversation] TTS stop called');
+  }
+
+  // AI 开始回复
+  startAIResponse(): void {
+    this.setState('processing');
+    this.interruptRequested = false;
+  }
+
+  // AI 开始说话（TTS）
+  async speak(text: string): Promise<void> {
+    if (!this.isListening || this.interruptRequested) {
+      console.log('[VoiceConversation] Not speaking, interrupted or not listening');
+      return;
+    }
+
+    this.setState('speaking');
+    this.isTTSSpeaking = true; // 标记TTS播放中
+    console.log('[VoiceConversation] TTS started, VAD threshold increased to prevent echo');
+
+    try {
+      if (this.ttsEngine === 'volcano') {
+        await volcanoTTSService.synthesize(text, {
+          voice: this.config.ttsVoice,
+          speed: this.config.ttsSpeed,
+        });
+      } else {
+        await piperTTSService.speak(text, this.options.ttsOptions);
+      }
+
+      if (!this.interruptRequested && this.isListening) {
+        this.options.onAIResponseComplete?.();
+        this.setState('listening');
+        // TTS结束，重启STT准备听下一句
+        if (!this.volcanoSTT) {
+          await this.startSTT();
+        }
+      }
+    } catch (error) {
+      console.error('[VoiceConversation] TTS error:', error);
+    } finally {
+      this.isTTSSpeaking = false; // TTS结束
+      console.log('[VoiceConversation] TTS ended, VAD threshold restored');
+    }
   }
 
   // 停止对话
-  stop() {
-    this.setState('idle');
+  stop(): void {
+    console.log('[VoiceConversation] Stopping');
     
-    // 停止VAD
+    this.isListening = false;
+    this.interruptRequested = true;
+    
     if (this.vadFrameId) {
       cancelAnimationFrame(this.vadFrameId);
       this.vadFrameId = null;
     }
-
-    // 停止识别
-    try {
-      this.recognition?.stop();
-    } catch {
-      // ignore
+    
+    if (this.speechEndTimeout) {
+      clearTimeout(this.speechEndTimeout);
+      this.speechEndTimeout = null;
     }
 
-    // 停止TTS
-    ttsService.stop();
-
-    // 清理音频
+    this.volcanoSTT?.stop();
+    this.volcanoSTT = null;
+    this.stopTTS();
+    
     this.audioContext?.close();
     this.audioContext = null;
-  }
-
-  // 打断AI说话
-  interrupt() {
-    if (this.state === 'speaking') {
-      console.log('[VoiceConversation] Interrupted');
-      ttsService.stop();
-      this.isInterrupted = true;
-      this.setState('listening');
-    }
-  }
-
-  // AI开始说话
-  async speak(text: string): Promise<void> {
-    if (this.state === 'idle') return;
     
-    this.isInterrupted = false;
-    this.setState('speaking');
-    
-    try {
-      await ttsService.speak(text, this.options.ttsOptions);
-      
-      if (!this.isInterrupted) {
-        this.options.onAIResponseComplete?.();
-        // 说完后自动回到监听状态
-        if (this.state !== 'idle') {
-          this.setState('listening');
-        }
-      }
-    } catch (error) {
-      console.error('[TTS] Error:', error);
-      this.setState('listening');
-    }
-  }
-
-  // 流式AI回复
-  async speakStreaming(text: string): Promise<void> {
-    if (this.state === 'idle') return;
-    
-    this.isInterrupted = false;
-    this.setState('speaking');
-    this.options.onAIResponse?.(text);
-    
-    await ttsService.speakStreaming(text, this.options.ttsOptions);
-  }
-
-  // 设置处理中状态（发送给AI时）
-  setProcessing() {
-    if (this.state !== 'idle') {
-      this.setState('processing');
-    }
+    this.setState('idle');
   }
 
   // 获取当前状态
   getState(): VoiceConversationState {
     return this.state;
   }
-
-  // 是否正在听
-  isListening(): boolean {
-    return this.state === 'listening';
-  }
-
-  // 是否被打断
-  isInterruptedState(): boolean {
-    return this.isInterrupted;
-  }
-
-  private setState(state: VoiceConversationState) {
-    if (this.state !== state) {
-      this.state = state;
-      this.options.onStateChange?.(state);
-    }
-  }
 }
 
-// 创建对话实例的工厂函数
-export function createVoiceConversation(options: VoiceConversationOptions = {}) {
+// 工厂函数
+export function createVoiceConversation(options: VoiceConversationOptions = {}): VoiceConversation {
   return new VoiceConversation(options);
 }

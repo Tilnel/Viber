@@ -1,28 +1,34 @@
+// Load environment variables FIRST, before any other imports
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { testConnection } from './db/index.js';
 import { setupSocketHandlers } from './socket/index.js';
+import { setupVolcanoSTTSocket } from './routes/volcanoSTT.js';
 import { errorHandler } from './middleware/error.js';
 import { authMiddleware } from './middleware/auth.js';
 
 // Routes
 import authRoutes from './routes/auth.js';
 import fsRoutes from './routes/fs.js';
+import ttsRoutes from './routes/tts.js';
+import piperTTSRoutes from './routes/piperTTS.js';
+import volcanoTTSRoutes from './routes/volcanoTTS.js';
+import volcanoSTTRoutes from './routes/volcanoSTT.js';
+import voiceRoutes from './routes/voice.js';
 import projectRoutes from './routes/project.js';
 import chatRoutes from './routes/chat.js';
 import gitRoutes from './routes/git.js';
 import settingsRoutes from './routes/settings.js';
-
-// Load environment variables
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -93,6 +99,11 @@ app.use('/api/auth', authRoutes);
 
 // Protected API Routes
 app.use('/api/fs', authMiddleware, fsRoutes);
+app.use('/api/tts', authMiddleware, ttsRoutes);
+app.use('/api/piper', authMiddleware, piperTTSRoutes);
+app.use('/api/volcano/tts', authMiddleware, volcanoTTSRoutes);
+app.use('/api/volcano/stt', authMiddleware, volcanoSTTRoutes);
+app.use('/api/voice', authMiddleware, voiceRoutes);
 app.use('/api/projects', authMiddleware, projectRoutes);
 app.use('/api/chat', authMiddleware, chatRoutes);
 app.use('/api/git', authMiddleware, gitRoutes);
@@ -100,6 +111,7 @@ app.use('/api/settings', authMiddleware, settingsRoutes);
 
 // Socket.io setup
 setupSocketHandlers(io);
+setupVolcanoSTTSocket(io);
 
 // Error handling
 app.use(errorHandler);

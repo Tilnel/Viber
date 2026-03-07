@@ -27,6 +27,11 @@ export default function FileTree({ projectPath, projectId }: FileTreeProps) {
 
   // 初始加载和项目切换时加载
   useEffect(() => {
+    // 如果没有 projectId，不加载文件树
+    if (!projectId) {
+      return;
+    }
+    
     const init = async () => {
       // 加载根目录
       await loadDirectory('.');
@@ -46,7 +51,7 @@ export default function FileTree({ projectPath, projectId }: FileTreeProps) {
     if (scrollRef.current && fileTreeScrollTop > 0) {
       scrollRef.current.scrollTop = fileTreeScrollTop;
     }
-  }, [projectPath]);
+  }, [projectPath, projectId]);
   
   // 启动自动刷新
   useEffect(() => {
@@ -115,6 +120,7 @@ export default function FileTree({ projectPath, projectId }: FileTreeProps) {
   };
 
   const handleRefresh = () => {
+    if (!projectId) return;
     loadDirectory('.');
   };
 
