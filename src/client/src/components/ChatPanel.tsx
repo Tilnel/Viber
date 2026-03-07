@@ -431,8 +431,12 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
   const processingVoiceRef = useRef<string | null>(null);
   const processingVoiceTimeRef = useRef<number>(0);
 
-  // 语音识别的临时消息（显示在左侧）
-  const [voiceTranscriptMessage, setVoiceTranscriptMessage] = useState<{text: string; id: number} | null>(null);
+  // 语音识别的实时中间结果（显示在输入框）
+  const handleInterimVoiceTranscript = useCallback((text: string) => {
+    // 实时中间结果 - 更新输入框
+    console.log('[ChatPanel] Interim voice transcript:', text);
+    setInputText(text);
+  }, [setInputText]);
 
   const handleVoiceTranscript = async (transcript: string) => {
     // 防重复检查
@@ -465,18 +469,11 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       return;
     }
     
-    console.log('[ChatPanel] Processing voice transcript:', transcript);
-    
-    // 在左侧显示语音识别结果（临时消息）
-    const tempId = Date.now();
-    setVoiceTranscriptMessage({ text: transcript, id: tempId });
+    console.log('[ChatPanel] Final voice transcript, sending:', transcript);
     
     // 直接发送消息
     const isFirstMessage = messages.length === 0;
     await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
-    
-    // 发送完成后清除临时消息
-    setVoiceTranscriptMessage(null);
   };
 
   // AI 回复文本收集（用于语音对话TTS）
@@ -915,17 +912,6 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           </div>
         )}
         
-        {/* 语音识别中的临时消息 */}
-        {voiceTranscriptMessage && (
-          <div className="message user voice-transcript">
-            <div className="message-avatar">🎤</div>
-            <div className="message-content">
-              <div className="stt-badge">语音识别中...</div>
-              <div className="message-text">{voiceTranscriptMessage.text}</div>
-            </div>
-          </div>
-        )}
-        
         <div ref={messagesEndRef} />
       </div>
 
@@ -939,6 +925,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
         handleKeyDown={handleKeyDown}
         stopGeneration={stopGeneration}
         handleVoiceTranscript={handleVoiceTranscript}
+        handleInterimVoiceTranscript={handleInterimVoiceTranscript}
       />
 
 

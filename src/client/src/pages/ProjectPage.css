@@ -68,19 +68,34 @@
 }
 
 .resize-handle {
-  width: 4px;
-  background: var(--border-color);
+  width: 12px;
+  margin: 0 -4px;
+  background: transparent;
   transition: background 0.2s;
-  z-index: 10;
+  z-index: 100;
   position: relative;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.resize-handle:hover {
-  background: var(--accent-color);
+.resize-handle::before {
+  content: '';
+  width: 4px;
+  height: 100%;
+  background: var(--border-color);
+  transition: background 0.2s, width 0.2s;
 }
 
-.resize-handle[data-resize-handle-active] {
+.resize-handle:hover::before {
   background: var(--accent-color);
+  width: 6px;
+}
+
+.resize-handle[data-resize-handle-active]::before {
+  background: var(--accent-color);
+  width: 6px;
 }
 
 /* 确保 Panel 内容不会溢出 */

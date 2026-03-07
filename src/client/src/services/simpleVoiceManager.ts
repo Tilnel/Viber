@@ -7,7 +7,8 @@ export type VoiceState = 'idle' | 'listening';
 export interface SimpleVoiceManagerOptions {
   speechThreshold: number;
   onStateChange?: (state: VoiceState) => void;
-  onTranscript?: (text: string) => void;
+  onTranscript?: (text: string) => void;  // 最终结果
+  onInterimTranscript?: (text: string) => void;  // 中间结果（实时）
   onError?: (error: string) => void;
 }
 
@@ -257,8 +258,14 @@ export class SimpleVoiceManager {
       
       this.socket.on('result', (data: { text: string; isFinal: boolean }) => {
         console.log('[SimpleVoice] ASR result:', data.text, 'final:', data.isFinal);
-        if (data.text && data.isFinal) {
+        if (!data.text) return;
+        
+        if (data.isFinal) {
+          // 最终结果
           this.options.onTranscript?.(data.text);
+        } else {
+          // 中间结果（实时）
+          this.options.onInterimTranscript?.(data.text);
         }
       });
       

@@ -6,13 +6,15 @@ import { useSettingsStore } from '../stores/settings';
 import './VoiceConversationButton.css';
 
 interface VoiceConversationButtonProps {
-  onUserSpeech: (text: string) => void;
+  onUserSpeech: (text: string) => void;  // 最终结果
+  onInterimSpeech?: (text: string) => void;  // 中间结果（实时）
   onInterrupt?: () => void;
   disabled?: boolean;
 }
 
 export default function VoiceConversationButton({
   onUserSpeech,
+  onInterimSpeech,
   onInterrupt,
   disabled
 }: VoiceConversationButtonProps) {
@@ -34,8 +36,13 @@ export default function VoiceConversationButton({
       },
       
       onTranscript: (text) => {
-        console.log('[VoiceButton] Transcript:', text);
+        console.log('[VoiceButton] Final transcript:', text);
         onUserSpeech(text);
+      },
+      
+      onInterimTranscript: (text) => {
+        // 实时中间结果
+        onInterimSpeech?.(text);
       },
       
       onError: (error) => {

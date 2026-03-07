@@ -5,15 +5,27 @@
   flex-direction: column;
 }
 
-/* 拖动调整手柄 */
+/* 拖动调整手柄 - 更大的可点击区域 */
 .resize-handle {
-  height: 8px;
+  height: 16px;
+  margin: -8px 0;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: row-resize;
   background: transparent;
   transition: background-color 0.2s;
+  position: relative;
+  z-index: 10;
+}
+
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  right: 0;
 }
 
 .resize-handle:hover,
@@ -22,17 +34,20 @@
 }
 
 .resize-indicator {
-  width: 40px;
-  height: 3px;
+  width: 60px;
+  height: 4px;
   background-color: var(--border-color);
   border-radius: 2px;
   transition: all 0.2s;
+  position: relative;
+  z-index: 11;
 }
 
 .resize-handle:hover .resize-indicator,
 .resize-handle.dragging .resize-indicator {
   background-color: var(--accent-color);
-  width: 60px;
+  width: 80px;
+  height: 5px;
 }
 
 /* 主输入区域 */
@@ -47,6 +62,7 @@
 .main-textarea {
   flex: 1;
   min-height: 40px;
+  max-height: 100%;
   padding: 10px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -57,6 +73,7 @@
   resize: none;
   font-family: inherit;
   overflow-y: auto;
+  align-self: stretch;
 }
 
 .main-textarea:focus {

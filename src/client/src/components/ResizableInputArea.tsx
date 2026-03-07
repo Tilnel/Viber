@@ -11,12 +11,13 @@ interface ResizableInputAreaProps {
   handleSend: () => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   stopGeneration: () => void;
-  handleVoiceTranscript: (text: string) => void;
+  handleVoiceTranscript: (text: string) => void;  // 最终结果
+  handleInterimVoiceTranscript?: (text: string) => void;  // 中间结果
 }
 
 const MIN_HEIGHT = 60;
-const MAX_HEIGHT = 300;
-const DEFAULT_HEIGHT = 100;
+const MAX_HEIGHT = 400;
+const DEFAULT_HEIGHT = 120;
 
 export default function ResizableInputArea({
   inputText,
@@ -26,7 +27,8 @@ export default function ResizableInputArea({
   handleSend,
   handleKeyDown,
   stopGeneration,
-  handleVoiceTranscript
+  handleVoiceTranscript,
+  handleInterimVoiceTranscript
 }: ResizableInputAreaProps) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
@@ -72,14 +74,18 @@ export default function ResizableInputArea({
     };
   }, [isDragging]);
 
-  // 自动调整textarea高度
+  // 自动调整textarea高度 - 填满容器
   useEffect(() => {
     const textarea = inputRef.current;
     if (textarea) {
-      textarea.style.height = '0';
-      const scrollHeight = textarea.scrollHeight;
-      const maxTextareaHeight = height - 20;
-      textarea.style.height = `${Math.min(scrollHeight, maxTextareaHeight)}px`;
+      // 重置高度以计算实际内容高度
+      textarea.style.height = 'auto';
+      const contentHeight = textarea.scrollHeight;
+      // 容器可用高度（减去padding）
+      const availableHeight = height - 16;
+      // 取内容高度和可用高度的较大值，但不超出可用高度
+      const targetHeight = Math.min(Math.max(contentHeight, 40), availableHeight);
+      textarea.style.height = `${targetHeight}px`;
     }
   }, [inputText, height, inputRef]);
 
@@ -112,6 +118,7 @@ export default function ResizableInputArea({
             <TTSControl />
             <VoiceConversationButton 
               onUserSpeech={handleVoiceTranscript}
+              onInterimSpeech={handleInterimVoiceTranscript}
               onInterrupt={stopGeneration}
             />
           </div>
