@@ -151,7 +151,8 @@ export class NewVoiceService {
   stop(): void {
     if (this.state === 'idle') return;
     
-    console.log('[NewVoiceService] Stopping...');
+    console.log('[NewVoiceService] Stopping... (called from:)');
+    console.trace('[NewVoiceService] Stop stack trace');
     
     // 停止录音
     this.recorder?.stop();
@@ -219,9 +220,16 @@ export class NewVoiceService {
     
     // 错误
     this.socket.on(ViberMessageType.ERROR, (data) => {
-      console.error('[NewVoiceService] Received error:', data);
-      if (data.context?.streamId === this.streamId || !data.context?.streamId) {
-        this.options.onError?.(data.message || data.error?.message || 'Unknown error');
+      console.error('[NewVoiceService] Received error from backend:', JSON.stringify(data, null, 2));
+      console.error('[NewVoiceService] Current streamId:', this.streamId, 'Error context streamId:', data?.context?.streamId);
+      
+      // 只处理当前流的错误，或者是全局错误
+      const isRelevant = !data?.context?.streamId || data.context.streamId === this.streamId;
+      console.error('[NewVoiceService] Is relevant error:', isRelevant);
+      
+      if (isRelevant) {
+        const errorMsg = data?.message || data?.error?.message || data?.error?.code || JSON.stringify(data);
+        this.options.onError?.(errorMsg);
       }
     });
   }

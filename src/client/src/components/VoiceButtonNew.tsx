@@ -39,9 +39,11 @@ export default function VoiceButtonNew({
         }
       },
       onError: (error) => {
-        console.error('[VoiceButtonNew] Error:', error);
-        toast.error(`语音错误: ${error}`);
-        stopStreaming();
+        console.error('[VoiceButtonNew] Error triggered:', error);
+        console.trace('[VoiceButtonNew] Error stack trace');
+        toast.error(`语音错误: ${error || '未知错误'}`);
+        // 不要自动停止，让用户手动控制
+        // stopStreaming();
       }
     });
 
