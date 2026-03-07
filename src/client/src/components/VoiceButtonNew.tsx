@@ -20,6 +20,12 @@ export default function VoiceButtonNew({
   const [isStreaming, setIsStreaming] = useState(false);
   const [volume, setVolume] = useState(0);
   const serviceRef = useRef<NewVoiceService | null>(null);
+  
+  // 使用 ref 存储最新的回调，避免闭包问题
+  const callbacksRef = useRef({ onUserSpeech, onInterimSpeech });
+  useEffect(() => {
+    callbacksRef.current = { onUserSpeech, onInterimSpeech };
+  }, [onUserSpeech, onInterimSpeech]);
 
   // 初始化服务 - 只在组件挂载时执行一次
   useEffect(() => {
@@ -35,13 +41,12 @@ export default function VoiceButtonNew({
       },
       onTranscript: (text, isFinal) => {
         if (isFinal) {
-          onUserSpeech(text);
+          callbacksRef.current.onUserSpeech(text);
         } else {
-          onInterimSpeech?.(text);
+          callbacksRef.current.onInterimSpeech?.(text);
         }
       },
       onError: (error) => {
-        console.error('[VoiceButtonNew] Error:', error);
         toast.error(`语音错误: ${error || '未知错误'}`);
       }
     });
