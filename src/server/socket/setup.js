@@ -8,6 +8,7 @@
 import { createViberSocketManager } from './viber.js';
 import { createVoiceHandlers } from './handlers/voice.js';
 import { createTerminalHandlers } from './handlers/terminal.js';
+import { createChatHandlers } from './handlers/chat.js';
 import { VoiceOrchestrator } from '../services/voice/VoiceOrchestrator.js';
 import { getChatService } from '../services/chat/ChatService.js';
 import { createVolcanoTTSService } from '../services/tts/index.js';
@@ -37,51 +38,18 @@ export function setupViberSocket(io) {
     socketManager: manager
   });
   
-  // 注册语音处理器
+  // 注册语音处理器（语音对话流程：ASR → VoiceOrchestrator）
   const voiceHandlers = createVoiceHandlers(voiceOrchestrator);
   manager.registerHandlers(voiceHandlers);
+  
+  // 注册聊天处理器（文字对话流程：Text → VoiceOrchestrator）
+  // 所有输入都统一走 VoiceOrchestrator 处理 LLM + TTS
+  const chatHandlers = createChatHandlers(voiceOrchestrator);
+  manager.registerHandlers(chatHandlers);
   
   // 注册终端处理器
   const terminalHandlers = createTerminalHandlers();
   manager.registerHandlers(terminalHandlers);
-  
-  // 注册聊天处理器（简化版）
-  manager.registerHandler('chat:send', async (socket, data, msgId) => {
-    const { sessionId, content, context } = data;
-    
-    console.log(`[ChatHandler] Message from ${socket.userId} in session ${sessionId}`);
-    
-    // 这里集成 LLM Service
-    // 简化示例：直接回复
-    socket.emit('message', {
-      type: 'chat:thinking',
-      data: {
-        messageId: msgId,
-        content: '思考中...'
-      }
-    });
-    
-    // 模拟流式响应
-    const words = ['你好', '，', '这是', 'AI', '的', '回复', '。'];
-    for (const word of words) {
-      await new Promise(r => setTimeout(r, 100));
-      socket.emit('message', {
-        type: 'chat:delta',
-        data: {
-          messageId: msgId,
-          content: word
-        }
-      });
-    }
-    
-    socket.emit('message', {
-      type: 'chat:complete',
-      data: {
-        messageId: msgId,
-        usage: { promptTokens: 10, completionTokens: 7 }
-      }
-    });
-  });
   
   // 注册文件系统处理器
   manager.registerHandler('fs:watch', async (socket, data) => {

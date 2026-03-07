@@ -60,7 +60,7 @@ export class VoiceOrchestrator {
   }
 
   /**
-   * 处理 ASR 识别结果
+   * 处理 ASR 识别结果（语音输入）
    * 这是核心方法：ASR 识别完成后自动走完整流程
    */
   async handleASRResult(streamId, text) {
@@ -85,14 +85,39 @@ export class VoiceOrchestrator {
     // 2. 更新状态
     dialog.state = 'processing';
 
-    // 3. 直接调用 LLM（不走前端 API），传入识别文本
-    await this.processLLM(streamId, dialog, text);
+    // 3. 走统一处理流程
+    await this.processConversation(streamId, dialog, text);
   }
 
   /**
-   * 调用 LLM 处理 (使用 ChatService/kimi-cli)
+   * 处理文字输入（与语音输入统一流程）
    */
-  async processLLM(streamId, dialog, userContent) {
+  async handleTextInput(streamId, data) {
+    const { sessionId, socketId, userId, userContent, context, ttsConfig } = data;
+    
+    console.log(`[VoiceOrchestrator] Text input for ${streamId}: "${userContent}"`);
+    
+    // 创建对话上下文
+    this.createDialog(streamId, {
+      sessionId,
+      socketId,
+      userId,
+      ttsConfig
+    });
+    
+    const dialog = this.dialogs.get(streamId);
+    dialog.state = 'processing';
+    dialog.context = context; // 保存上下文（当前文件等）
+    
+    // 走统一处理流程
+    await this.processConversation(streamId, dialog, userContent);
+  }
+
+  /**
+   * 统一处理对话流程：LLM + 流式显示 + TTS
+   * 语音输入和文字输入都走这里
+   */
+  async processConversation(streamId, dialog, userContent) {
     console.log(`[VoiceOrchestrator] Starting LLM for ${streamId}, session: ${dialog.sessionId}, content: "${userContent}"`);
     
     if (!userContent) {

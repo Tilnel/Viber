@@ -15,6 +15,7 @@ import { getViberSocketManager } from '../viber.js';
 import { createDetector } from '../../services/detector/index.js';
 import { ASRServiceFactory } from '../../services/asr/index.js';
 import { SpeakerControllerImpl } from '../../services/speaker/index.js';
+import { getUserTTSConfig } from '../../services/user/UserSettingsService.js';
 
 /**
  * 创建语音处理器
@@ -44,6 +45,16 @@ export function createVoiceHandlers(voiceOrchestrator) {
       
       console.log(`[VoiceHandler] Start stream ${streamId} for session ${sessionId}`);
       
+      // 从数据库获取用户 TTS 配置
+      let userTTSConfig;
+      try {
+        userTTSConfig = await getUserTTSConfig(socket.userId);
+        console.log(`[VoiceHandler] User ${socket.userId} TTS config:`, userTTSConfig);
+      } catch (err) {
+        console.error(`[VoiceHandler] Failed to get user TTS config, using defaults:`, err.message);
+        userTTSConfig = { voice: 'BV001_streaming', speed: 1.0 };
+      }
+      
       let asrSession;
       try {
         // 创建 ASR 会话 (注意：createSession 是 async 的，会连接火山引擎)
@@ -63,7 +74,7 @@ export function createVoiceHandlers(voiceOrchestrator) {
         });
       }
       
-      // 存储流信息（包含 TTS 配置）
+      // 存储流信息（包含 TTS 配置 - 从数据库读取）
       const streamInfo = {
         id: streamId,
         sessionId,
@@ -72,8 +83,8 @@ export function createVoiceHandlers(voiceOrchestrator) {
         asrSession,
         config,
         ttsConfig: {
-          voice: config?.ttsVoice || 'BV001_streaming',
-          speed: config?.ttsSpeed || 1.0
+          voice: userTTSConfig.voice || 'BV001_streaming',
+          speed: userTTSConfig.speed || 1.0
         },
         startTime: Date.now(),
         audioBuffer: [],

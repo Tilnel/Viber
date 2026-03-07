@@ -355,6 +355,12 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     };
     
     try {
+      // 使用 WebSocket 发送消息，统一走 VoiceOrchestrator 处理 LLM + TTS
+      viberSocketRef.current.sendChat(sessionId, content, context);
+      
+      // 等待 WebSocket 响应处理（由 useEffect 中的监听函数处理）
+      // 保留旧的 HTTP API 代码作为备用（暂时注释掉）
+      /*
       let assistantContent = '';
       
       await chatAPI.sendMessageStream(
