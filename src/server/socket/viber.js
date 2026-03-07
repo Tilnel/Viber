@@ -73,6 +73,13 @@ export class ViberSocketManager {
    */
   async authMiddleware(socket, next) {
     try {
+      // 开发环境：允许无 token 连接
+      if (process.env.NODE_ENV === 'development' && !process.env.REQUIRE_AUTH) {
+        socket.userId = 'dev-user';
+        socket.authenticated = true;
+        return next();
+      }
+      
       // 从 handshake auth 或 query 获取 token
       const token = socket.handshake.auth?.token || 
                     socket.handshake.query?.token;

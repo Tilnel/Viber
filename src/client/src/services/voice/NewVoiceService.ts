@@ -10,7 +10,12 @@
  */
 
 import { SimpleRecorder } from './SimpleRecorder';
-import { getViberSocket, ViberMessageType } from '../viberSocket';
+import { getViberSocket, ViberMessageType, resetViberSocket } from '../viberSocket';
+
+// 获取认证 token
+function getAuthToken(): string {
+  return localStorage.getItem('auth_token') || '';
+}
 
 export type NewVoiceState = 'idle' | 'connecting' | 'streaming' | 'error';
 
@@ -31,7 +36,7 @@ export class NewVoiceService {
   
   // 组件
   private recorder: SimpleRecorder | null = null;
-  private socket = getViberSocket();
+  private socket: ReturnType<typeof getViberSocket>;
   
   // 状态
   private streamId: string | null = null;
@@ -40,6 +45,10 @@ export class NewVoiceService {
 
   constructor(options: NewVoiceServiceOptions = {}) {
     this.options = options;
+    // 创建带 token 的 socket 实例
+    this.socket = getViberSocket({
+      token: getAuthToken()
+    });
     this.setupSocketHandlers();
   }
 
