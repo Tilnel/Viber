@@ -4,16 +4,13 @@ import { flushSync } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useProjectStore } from '../stores/project';
-import { chatAPI, projectAPI, type StreamEvent } from '../services/api';
+import { chatAPI, projectAPI } from '../services/api';
 import { useSettingsStore } from '../stores/settings';
-import { loadVoiceConfig, VoiceConfig } from '../services/voiceConfig';
-import { piperTTSService } from '../services/piperTTS';
-import { volcanoTTSService } from '../services/volcanoTTS';
+import { loadVoiceConfig } from '../services/voiceConfig';
 import ToolCallBlock from './ToolCallBlock';
 import ResizableInputArea from './ResizableInputArea';
-import type { ChatMessage, ChatSession } from '../../../shared/types';
+import type { ChatMessage } from '../../../shared/types';
 import './ChatPanel.css';
-import { cleanTextForTTSStreaming } from '../utils/ttsTextCleaner';
 import { getViberSocket, ViberMessageType } from '../services/viberSocket';
 
 // 消息块类型
@@ -136,13 +133,14 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
   useEffect(() => {
     const socket = viberSocketRef.current;
     
-    // 监听 LLM 思考/开始
+    // 监听 LLM 思考/开始（文字输入和语音输入都走这里）
     const unsubscribeThinking = socket.on(ViberMessageType.CHAT_THINKING, (data) => {
-      console.log('[ChatPanel] Voice LLM started:', data);
+      console.log('[ChatPanel] LLM started:', data);
       setIsVoiceFlowActive(true);
       voiceAccumulatedTextRef.current = '';
       
-      // 添加用户消息到界面（语音输入的用户消息）
+      // 如果是语音输入（带有 text 字段），添加用户消息
+      // 文字输入的用户消息已在 sendMessage 中添加
       if (currentSession && data.text) {
         const userMessage: ChatMessage = {
           id: Date.now(),
@@ -356,169 +354,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     
     try {
       // 使用 WebSocket 发送消息，统一走 VoiceOrchestrator 处理 LLM + TTS
+      // 响应通过 WebSocket 监听（chat:thinking, chat:delta, chat:complete, speaker:play）处理
       viberSocketRef.current.sendChat(sessionId, content, context);
-      
-      // 等待 WebSocket 响应处理（由 useEffect 中的监听函数处理）
-      // 保留旧的 HTTP API 代码作为备用（暂时注释掉）
-      /*
-      let assistantContent = '';
-      
-      await chatAPI.sendMessageStream(
-        sessionId,
-        content,
-        context,
-        abortControllerRef.current?.signal,
-        {
-          onTextDelta: (text) => {
-            assistantContent += text;
-            
-            // 更新最后一个文本块或添加新块
-            flushSync(() => {
-              setStreamingBlocks(prev => {
-                const lastBlock = prev[prev.length - 1];
-                if (lastBlock?.type === 'text') {
-                  // 追加到现有文本块
-                  const newBlocks = [...prev];
-                  newBlocks[newBlocks.length - 1] = {
-                    ...lastBlock,
-                    content: (lastBlock.content || '') + text
-                  };
-                  streamingBlocksRef.current = newBlocks;
-                  return newBlocks;
-                } else {
-                  // 创建新文本块
-                  const newBlocks = [...prev, { type: 'text' as const, content: text }];
-                  streamingBlocksRef.current = newBlocks;
-                  return newBlocks;
-                }
-              });
-            });
-          },
-          
-          onToolCall: (tool) => {
-            // 工具调用开始时添加一个占位块
-            flushSync(() => {
-              setStreamingBlocks(prev => {
-                const target = tool.args.path || tool.args.command || 
-                              tool.args.pattern || tool.args.url || tool.args.q || '';
-                const newBlocks = [...prev, {
-                  type: 'tool' as const,
-                  id: tool.id,
-                  operation: tool.name,
-                  target,
-                  result: '',
-                  args: tool.args
-                }];
-                streamingBlocksRef.current = newBlocks;
-                return newBlocks;
-              });
-            });
-          },
-          
-          onToolResult: (result) => {
-            // 更新对应的工具块
-            flushSync(() => {
-              setStreamingBlocks(prev => {
-                const index = prev.findIndex(b => b.type === 'tool' && b.id === result.id);
-                if (index >= 0) {
-                  const newBlocks = [...prev];
-                  newBlocks[index] = {
-                    ...newBlocks[index],
-                    result: result.content
-                  };
-                  streamingBlocksRef.current = newBlocks;
-                  return newBlocks;
-                }
-                // 如果没有找到对应的调用，直接添加结果块
-                const target = result.args.path || result.args.command || 
-                              result.args.pattern || result.args.url || result.args.q || '';
-                const newBlocks = [...prev, {
-                  type: 'tool' as const,
-                  id: result.id,
-                  operation: result.name,
-                  target,
-                  result: result.content,
-                  args: result.args
-                }];
-                streamingBlocksRef.current = newBlocks;
-                return newBlocks;
-              });
-            });
-            
-            // 同时构建文本格式的内容用于保存
-            const toolHeader = `<tool>${result.name}</tool>` +
-              (result.args.path ? `<path>${result.args.path}</path>` : '') +
-              (result.args.command ? `<command>${result.args.command}</command>` : '') +
-              (result.args.pattern ? `<pattern>${result.args.pattern}</pattern>` : '') +
-              (result.args.url ? `<url>${result.args.url}</url>` : '') +
-              (result.args.q ? `<q>${result.args.q}</q>` : '');
-            assistantContent += `<system>${toolHeader}</system>\n${result.content}\n`;
-          },
-          
-          onError: (message) => {
-            console.error('Stream error:', message);
-          },
-          
-          onDone: () => {
-            // 流结束，将流式块转换为最终消息
-          }
-        }
-      );
-      
-      // 流结束后，将最终内容添加到消息列表
-      // 直接将 blocks 作为 JSON 存储（与后端格式一致）
-      const finalBlocks = streamingBlocksRef.current.map(block => ({
-        type: block.type,
-        ...(block.type === 'text' 
-          ? { content: block.content }
-          : {
-              id: block.id,
-              operation: block.operation,
-              target: block.target,
-              result: block.result,
-              args: block.args
-            }
-        )
-      }));
-      
-      // 添加助手消息到列表
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1,
-        sessionId,
-        role: 'assistant',
-        content: JSON.stringify(finalBlocks),
-        createdAt: new Date().toISOString()
-      }]);
-      
-      // 自动朗读 AI 回复（打字输入模式）
-      const voiceConfig = loadVoiceConfig();
-      if (voiceConfig.autoSpeakAIResponse) {
-        const textContent = finalBlocks
-          .filter(b => b.type === 'text')
-          .map(b => b.content)
-          .join('\n');
-        
-        if (textContent.trim()) {
-          const cleanedText = cleanTextForTTSStreaming(textContent, true);
-          if (cleanedText.trim()) {
-            // 根据配置的引擎选择 TTS
-            if (voiceConfig.ttsEngine === 'volcano') {
-              volcanoTTSService.synthesizeStream(cleanedText, {
-                voice: voiceConfig.ttsVoice,
-                speed: voiceConfig.ttsSpeed,
-              });
-            } else if (voiceConfig.ttsEngine === 'piper') {
-              piperTTSService.speakStreaming(cleanedText);
-            }
-            // browser TTS 不支持流式，跳过
-          }
-        }
-      }
-      
-      // 清空流式块
-      streamingBlocksRef.current = [];
-      setStreamingBlocks([]);
-      
     } catch (error) {
       console.error('Failed to send message:', error);
       
