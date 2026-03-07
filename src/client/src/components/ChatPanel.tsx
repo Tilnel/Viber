@@ -88,15 +88,15 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     // 设置打断标志
     interruptedRef.current = true;
     
+    // 清空音频队列（会在 processQueue 循环中检测到并停止）
+    audioQueueRef.current = [];
+    
     // 停止当前播放的音频
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
+      currentAudioRef.current.src = ''; // 释放资源
       currentAudioRef.current = null;
     }
-    
-    // 清空音频队列
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
     
     // 发送停止命令到后端
     viberSocketRef.current.stopChat(0);
@@ -237,68 +237,60 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     });
     
     // 监听 TTS 音频播放 - 使用队列顺序播放
+    const processQueue = async () => {
+      if (isPlayingRef.current) return; // 已经在处理队列
+      
+      isPlayingRef.current = true;
+      
+      while (audioQueueRef.current.length > 0 && !interruptedRef.current) {
+        const audioData = audioQueueRef.current.shift();
+        if (!audioData) continue;
+        
+        try {
+          const audioBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
+          const blob = new Blob([audioBytes], { type: 'audio/mp3' });
+          const url = URL.createObjectURL(blob);
+          const audioEl = new Audio(url);
+          
+          currentAudioRef.current = audioEl;
+          
+          // 等待音频播放完成
+          await new Promise<void>((resolve) => {
+            audioEl.onended = () => {
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            
+            audioEl.onerror = () => {
+              console.error('[ChatPanel] TTS audio error');
+              URL.revokeObjectURL(url);
+              resolve();
+            };
+            
+            audioEl.play().catch(e => {
+              console.error('[ChatPanel] TTS play error:', e);
+              resolve();
+            });
+          });
+          
+        } catch (e) {
+          console.error('[ChatPanel] TTS decode error:', e);
+        }
+      }
+      
+      currentAudioRef.current = null;
+      isPlayingRef.current = false;
+    };
+    
     const unsubscribeSpeakerPlay = socket.on(ViberMessageType.SPEAKER_PLAY, (data) => {
-      console.log('[ChatPanel] speaker:play event received:', JSON.stringify(data).substring(0, 200));
+      console.log('[ChatPanel] speaker:play event received:', JSON.stringify(data).substring(0, 100));
       const { audioData, text } = data || {};
-      console.log(`[ChatPanel] TTS audio received, audioData length: ${audioData?.length}, text: "${text?.substring(0, 30)}..."`);
       
       if (audioData && !interruptedRef.current) {
-        // 添加到队列并尝试播放
         audioQueueRef.current.push(audioData);
-        playNextAudio();
+        processQueue(); // 启动队列处理（如果还没在运行）
       }
     });
-    
-    // 顺序播放音频队列
-    const playNextAudio = () => {
-      if (isPlayingRef.current || audioQueueRef.current.length === 0) {
-        return; // 正在播放或队列为空
-      }
-      
-      if (interruptedRef.current) {
-        audioQueueRef.current = []; // 已打断，清空队列
-        return;
-      }
-      
-      const audioData = audioQueueRef.current.shift();
-      if (!audioData) return;
-      
-      try {
-        const audioBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
-        const blob = new Blob([audioBytes], { type: 'audio/mp3' });
-        const url = URL.createObjectURL(blob);
-        const audioEl = new Audio(url);
-        
-        currentAudioRef.current = audioEl;
-        isPlayingRef.current = true;
-        
-        audioEl.onended = () => {
-          URL.revokeObjectURL(url);
-          isPlayingRef.current = false;
-          currentAudioRef.current = null;
-          playNextAudio(); // 播放下一个
-        };
-        
-        audioEl.onerror = () => {
-          console.error('[ChatPanel] TTS audio error');
-          URL.revokeObjectURL(url);
-          isPlayingRef.current = false;
-          currentAudioRef.current = null;
-          playNextAudio(); // 跳过错误的，继续播放下一个
-        };
-        
-        audioEl.play().catch(e => {
-          console.error('[ChatPanel] TTS play error:', e);
-          isPlayingRef.current = false;
-          currentAudioRef.current = null;
-          playNextAudio();
-        });
-      } catch (e) {
-        console.error('[ChatPanel] TTS decode error:', e);
-        isPlayingRef.current = false;
-        playNextAudio();
-      }
-    };
     
     return () => {
       unsubscribeThinking();
