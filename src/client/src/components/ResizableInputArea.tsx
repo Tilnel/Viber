@@ -13,6 +13,7 @@ interface ResizableInputAreaProps {
   stopGeneration: () => void;
   handleVoiceTranscript: (text: string) => void;  // 最终结果
   handleInterimVoiceTranscript?: (text: string) => void;  // 中间结果
+  sessionId?: number | null;
 }
 
 const MIN_HEIGHT = 60;
@@ -28,7 +29,8 @@ export default function ResizableInputArea({
   handleKeyDown,
   stopGeneration,
   handleVoiceTranscript,
-  handleInterimVoiceTranscript
+  handleInterimVoiceTranscript,
+  sessionId
 }: ResizableInputAreaProps) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [isDragging, setIsDragging] = useState(false);
@@ -120,6 +122,7 @@ export default function ResizableInputArea({
               onUserSpeech={handleVoiceTranscript}
               onInterimSpeech={handleInterimVoiceTranscript}
               onInterrupt={stopGeneration}
+              sessionId={sessionId}
             />
           </div>
           

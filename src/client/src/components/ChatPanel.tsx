@@ -1044,6 +1044,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
         stopGeneration={stopGeneration}
         handleVoiceTranscript={handleVoiceTranscript}
         handleInterimVoiceTranscript={handleInterimVoiceTranscript}
+        sessionId={currentSession?.id}
       />
 
 

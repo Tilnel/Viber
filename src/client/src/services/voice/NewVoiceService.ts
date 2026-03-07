@@ -120,7 +120,13 @@ export class NewVoiceService {
     }
     
     // 3. 通知后端开始音频流
-    this.socket.startVoice(sessionId || 'default', {
+    // sessionId 必须是有效的数字，不能是 'default' 字符串
+    if (!sessionId || sessionId === 'default') {
+      this.setState('error');
+      throw new Error('请先选择一个会话才能开始语音对话');
+    }
+    
+    this.socket.startVoice(sessionId, {
       sampleRate: 16000,
       language: 'zh-CN'
     });

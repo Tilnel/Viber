@@ -9,13 +9,15 @@ interface VoiceButtonNewProps {
   onInterimSpeech?: (text: string) => void;
   onInterrupt?: () => void;
   disabled?: boolean;
+  sessionId?: number | null;
 }
 
 export default function VoiceButtonNew({
   onUserSpeech,
   onInterimSpeech,
   onInterrupt,
-  disabled
+  disabled,
+  sessionId
 }: VoiceButtonNewProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [volume, setVolume] = useState(0);
@@ -62,13 +64,13 @@ export default function VoiceButtonNew({
     const service = serviceRef.current;
     if (!service) return false;
 
-    const success = await service.start();
+    const success = await service.start(sessionId || undefined);
     if (success) {
       toast.success('语音助手已启动', { autoClose: 1500 });
       return true;
     }
     return false;
-  }, []);
+  }, [sessionId]);
 
   const stopStreaming = useCallback(() => {
     serviceRef.current?.stop();
@@ -83,12 +85,18 @@ export default function VoiceButtonNew({
     if (isCurrentlyStreaming) {
       stopStreaming();
     } else {
+      // 检查是否有有效的 sessionId
+      if (!sessionId) {
+        toast.info('请先创建一个会话才能使用语音对话');
+        return;
+      }
+      
       const success = await startStreaming();
       if (!success) {
         toast.error('启动失败，请检查麦克风权限');
       }
     }
-  }, [startStreaming, stopStreaming]);
+  }, [startStreaming, stopStreaming, sessionId]);
 
   return (
     <div className="voice-conversation-wrapper">
