@@ -11,11 +11,12 @@ import { LLMStreamChunk, LLMStreamChunkType } from './types.js';
 
 /**
  * Kimi Fast API 配置
+ * 支持的环境变量（按优先级）：KIMI_API_KEY, MOONSHOT_API_KEY, OPENAI_API_KEY
  */
 const KIMI_CONFIG = {
-  API_KEY: process.env.KIMI_API_KEY,
-  BASE_URL: 'https://api.moonshot.cn/v1',
-  DEFAULT_MODEL: 'kimi-latest',
+  API_KEY: process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY || process.env.OPENAI_API_KEY,
+  BASE_URL: process.env.KIMI_BASE_URL || 'https://api.moonshot.cn/v1',
+  DEFAULT_MODEL: process.env.KIMI_MODEL || 'kimi-latest',
   MAX_TOKENS: 4096,
   TEMPERATURE: 0.7
 };
@@ -36,7 +37,11 @@ export class KimiLLMService extends LLMServiceImpl {
     this.baseUrl = config.baseUrl || KIMI_CONFIG.BASE_URL;
 
     if (!this.apiKey) {
-      console.warn('[KimiLLMService] Warning: KIMI_API_KEY not set');
+      console.warn('[KimiLLMService] Warning: No API key found. Set KIMI_API_KEY or MOONSHOT_API_KEY env var.');
+    } else {
+      const source = process.env.KIMI_API_KEY ? 'KIMI_API_KEY' : 
+                     process.env.MOONSHOT_API_KEY ? 'MOONSHOT_API_KEY' : 'OPENAI_API_KEY';
+      console.log(`[KimiLLMService] API key loaded from ${source}`);
     }
 
     console.log('[KimiLLMService] Initialized with model:', this.config.defaultModel);
@@ -48,7 +53,7 @@ export class KimiLLMService extends LLMServiceImpl {
    */
   async *_callAPI(messages, options, context) {
     if (!this.apiKey) {
-      throw new Error('KIMI_API_KEY not configured');
+      throw new Error('Kimi API key not configured. Please set KIMI_API_KEY or MOONSHOT_API_KEY environment variable.');
     }
 
     const url = `${this.baseUrl}/chat/completions`;
