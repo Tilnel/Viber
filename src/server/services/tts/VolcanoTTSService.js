@@ -211,4 +211,14 @@ export function createVolcanoTTSService(config = {}) {
   return new VolcanoTTSService(config);
 }
 
+// 单例实例（用于 routes/voice.js 复用）
+let volcanoTTSServiceInstance = null;
+
+export function getVolcanoTTSService(config = {}) {
+  if (!volcanoTTSServiceInstance) {
+    volcanoTTSServiceInstance = new VolcanoTTSService(config);
+  }
+  return volcanoTTSServiceInstance;
+}
+
 export default VolcanoTTSService;

@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import WebSocket from 'ws';
 import crypto from 'crypto';
+import { getVolcanoTTSService } from '../services/tts/VolcanoTTSService.js';
 
 const router = Router();
 
@@ -27,86 +28,15 @@ function checkVolcanoConfig() {
 const EDGE_TTS_ENDPOINT = 'southeastasia.api.speech.microsoft.com';
 const EDGE_TTS_PATH = '/accfreetrial/texttospeech/acc/v3.0-beta1/vcg/speak';
 
-// 火山引擎 TTS
+
+// 火山引擎 TTS - 使用 VolcanoTTSService
 async function synthesizeVolcano(text, voice, speed) {
-  return new Promise((resolve, reject) => {
-    const audioChunks = [];
-    let isCompleted = false;
-
-    // 构建二进制请求
-    const configText = JSON.stringify({
-      app: { appid: VOLCANO_CONFIG.APPID, token: VOLCANO_CONFIG.TOKEN, cluster: 'volcano_tts' },
-      user: { uid: `user_${Date.now()}` },
-      audio: { voice_type: voice, encoding: 'mp3', speed_ratio: speed },
-      request: { reqid: crypto.randomUUID(), text, text_type: 'plain', operation: 'submit' }
-    });
-
-    const configBinary = Buffer.from(configText, 'utf8');
-    const header = Buffer.alloc(4);
-    header.writeUInt8(0x11, 0);
-    header.writeUInt8(0x10, 1);
-    header.writeUInt8(0x10, 2);
-    header.writeUInt8(0x00, 3);
-    const lengthBuffer = Buffer.alloc(4);
-    lengthBuffer.writeUInt32BE(configBinary.length, 0);
-    const requestBuffer = Buffer.concat([header, lengthBuffer, configBinary]);
-
-    const wsUrl = `wss://openspeech.bytedance.com/api/v1/tts/ws_binary?appid=${VOLCANO_CONFIG.APPID}`;
-    const ws = new WebSocket(wsUrl, {
-      headers: { 'Authorization': `Bearer;${VOLCANO_CONFIG.TOKEN}` },
-      skipUTF8Validation: true,
-    });
-
-    ws.on('open', () => {
-      ws.send(requestBuffer);
-    });
-
-    ws.on('message', (data) => {
-      if (!Buffer.isBuffer(data) || data.length < 8) return;
-      
-      const seqSigned = data.readInt32BE(4);
-      const msgType = (data[1] >> 4) & 0x0f;
-      const isLast = seqSigned < 0;
-      
-      if (msgType === 0x0f) {
-        reject(new Error('TTS服务器错误'));
-        ws.close();
-      } else if (msgType === 0x0b || msgType === 0x00) {
-        const audioData = data.slice(8);
-        if (audioData.length > 0) {
-          audioChunks.push(audioData);
-        }
-        if (isLast) {
-          ws.close();
-        }
-      }
-    });
-
-    ws.on('close', () => {
-      if (!isCompleted) {
-        isCompleted = true;
-        if (audioChunks.length > 0) {
-          resolve(Buffer.concat(audioChunks));
-        } else {
-          reject(new Error('未收到音频数据'));
-        }
-      }
-    });
-
-    ws.on('error', (err) => {
-      if (!isCompleted) {
-        isCompleted = true;
-        reject(err);
-      }
-    });
-
-    setTimeout(() => {
-      if (!isCompleted) {
-        ws.close();
-        reject(new Error('TTS超时'));
-      }
-    }, 30000);
+  const ttsService = getVolcanoTTSService({
+    voice: voice || 'BV001_streaming'
   });
+  
+  const result = await ttsService.synthesize(text, { voice, speed });
+  return result.audioData;
 }
 
 // Edge TTS
