@@ -6,7 +6,7 @@
  * @module services/voice
  */
 
-import { LLMMessage, LLMMessageRole, LLMStreamChunkType } from '../llm/types.js';
+import { getChatService } from '../chat/ChatService.js';
 
 /**
  * 语音对话上下文
@@ -29,14 +29,14 @@ export class VoiceDialogContext {
  * 
  * 职责：
  * 1. 接收 ASR 识别结果
- * 2. 直接调用 LLMService 获取回复
+ * 2. 直接调用 ChatService (kimi-cli) 获取回复
  * 3. 将 LLM 文本送给 TTSService 合成
  * 4. 通过 WebSocket 推送到前端（识别文本、LLM 文本、TTS 音频）
  * 5. 管理对话历史
  */
 export class VoiceOrchestrator {
   constructor(options) {
-    this.llmService = options.llmService;
+    this.chatService = options.chatService || getChatService();
     this.ttsService = options.ttsService;
     this.socketManager = options.socketManager;
     
@@ -81,8 +81,7 @@ export class VoiceOrchestrator {
       }
     });
 
-    // 2. 添加到对话历史
-    dialog.messages.push(LLMMessage.text(LLMMessageRole.USER, text));
+    // 2. 更新状态
     dialog.state = 'processing';
 
     // 3. 直接调用 LLM（不走前端 API）
@@ -90,10 +89,24 @@ export class VoiceOrchestrator {
   }
 
   /**
-   * 调用 LLM 处理
+   * 调用 LLM 处理 (使用 ChatService/kimi-cli)
    */
   async processLLM(streamId, dialog) {
-    console.log(`[VoiceOrchestrator] Starting LLM for ${streamId}`);
+    console.log(`[VoiceOrchestrator] Starting LLM for ${streamId}, session: ${dialog.sessionId}`);
+    
+    if (!this.chatService.isAvailable()) {
+      console.error('[VoiceOrchestrator] ChatService (kimi-cli) not available');
+      this.socketManager.sendToSocket(dialog.socketId, {
+        type: 'error',
+        data: {
+          code: 'CHAT_SERVICE_UNAVAILABLE',
+          message: 'Kimi CLI not found. Please install: npm install -g kimi-cli',
+          context: { streamId }
+        }
+      });
+      dialog.state = 'idle';
+      return;
+    }
     
     // 通知前端 LLM 开始处理
     this.socketManager.sendToSocket(dialog.socketId, {
@@ -104,41 +117,33 @@ export class VoiceOrchestrator {
       }
     });
     
+    // 获取最后一条用户消息
+    const lastUserMessage = dialog.messages[dialog.messages.length - 1];
+    const userContent = lastUserMessage?.content || '';
+    
+    let fullResponse = '';
+    let ttsBuffer = '';
+    
     try {
-      // 构建系统提示词
-      const systemMessage = LLMMessage.text(
-        LLMMessageRole.SYSTEM,
-        '你是一个有帮助的 AI 助手。请用简洁的语言回答问题。'
-      );
-      
-      const messages = [systemMessage, ...dialog.messages];
-      
-      // 流式请求 LLM
-      const stream = this.llmService.request(messages, {
-        streaming: true,
-        processPipeline: {
-          thinkingProcessor: false, // 语音对话不需要思考处理
-          enableTTS: false // 我们自己控制 TTS
-        }
-      });
-
-      let fullResponse = '';
-      let ttsBuffer = '';
-      
-      for await (const chunk of stream) {
-        // 处理不同类型的 chunk
-        switch (chunk.type) {
-          case LLMStreamChunkType.TEXT:
-            const textChunk = chunk.data.text;
-            fullResponse += textChunk;
-            ttsBuffer += textChunk;
+      await this.chatService.sendMessage(
+        {
+          sessionId: dialog.sessionId,
+          content: userContent,
+          context: {
+            // 语音对话没有当前文件上下文，可以后续扩展
+          }
+        },
+        {
+          onTextDelta: (text) => {
+            fullResponse += text;
+            ttsBuffer += text;
             
             // 实时推送给前端显示
             this.socketManager.sendToSocket(dialog.socketId, {
               type: 'chat:delta',
               data: {
                 streamId,
-                content: textChunk
+                content: text
               }
             });
             
@@ -150,33 +155,32 @@ export class VoiceOrchestrator {
               // 异步合成 TTS
               this.synthesizeAndPlay(streamId, ttsText);
             }
-            break;
-            
-          case LLMStreamChunkType.TOOL_USE:
+          },
+          
+          onToolCall: (tool) => {
             // 工具调用 - 前端显示
             this.socketManager.sendToSocket(dialog.socketId, {
               type: 'chat:tool:call',
               data: {
                 streamId,
-                tool: chunk.data.name,
-                input: chunk.data.input
+                tool: tool.name,
+                input: tool.args
               }
             });
-            break;
-            
-          case LLMStreamChunkType.TOOL_RESULT:
+          },
+          
+          onToolResult: (result) => {
             // 工具结果 - 前端显示
             this.socketManager.sendToSocket(dialog.socketId, {
               type: 'chat:tool:result',
               data: {
                 streamId,
-                result: chunk.data.result
+                result: result.content
               }
             });
-            break;
-            
-          case LLMStreamChunkType.DONE:
-            // LLM 完成
+          },
+          
+          onComplete: async (result) => {
             console.log(`[VoiceOrchestrator] LLM done for ${streamId}`);
             
             // 处理剩余 TTS 缓冲
@@ -184,37 +188,32 @@ export class VoiceOrchestrator {
               await this.synthesizeAndPlay(streamId, ttsBuffer);
             }
             
-            // 添加助手回复到历史
-            dialog.messages.push(
-              LLMMessage.text(LLMMessageRole.ASSISTANT, fullResponse)
-            );
-            
             // 通知前端完成
             this.socketManager.sendToSocket(dialog.socketId, {
               type: 'chat:complete',
               data: {
                 streamId,
-                text: fullResponse
+                text: result.content
               }
             });
             
             dialog.state = 'idle';
-            break;
-            
-          case LLMStreamChunkType.ERROR:
-            console.error(`[VoiceOrchestrator] LLM error:`, chunk.data);
+          },
+          
+          onError: (error) => {
+            console.error(`[VoiceOrchestrator] LLM error:`, error);
             this.socketManager.sendToSocket(dialog.socketId, {
               type: 'error',
               data: {
                 code: 'LLM_ERROR',
-                message: chunk.data.message,
+                message: error,
                 context: { streamId }
               }
             });
             dialog.state = 'idle';
-            break;
+          }
         }
-      }
+      );
       
     } catch (error) {
       console.error(`[VoiceOrchestrator] LLM processing error:`, error);
@@ -300,10 +299,8 @@ export class VoiceOrchestrator {
     if (dialog) {
       console.log(`[VoiceOrchestrator] Ending dialog ${streamId}`);
       
-      // 如果正在处理，停止 LLM
-      if (dialog.llmRequestId) {
-        this.llmService.stop(dialog.llmRequestId);
-      }
+      // 停止该会话的生成
+      this.chatService.stopGeneration(dialog.sessionId);
       
       this.dialogs.delete(streamId);
     }
@@ -318,10 +315,8 @@ export class VoiceOrchestrator {
 
     console.log(`[VoiceOrchestrator] Interrupting ${streamId}`);
     
-    // 停止 LLM
-    if (dialog.llmRequestId) {
-      this.llmService.stop(dialog.llmRequestId);
-    }
+    // 停止该会话的生成
+    this.chatService.stopGeneration(dialog.sessionId);
     
     // 停止 TTS
     this.socketManager.sendToSocket(dialog.socketId, {

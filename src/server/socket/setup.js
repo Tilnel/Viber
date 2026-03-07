@@ -9,7 +9,7 @@ import { createViberSocketManager } from './viber.js';
 import { createVoiceHandlers } from './handlers/voice.js';
 import { createTerminalHandlers } from './handlers/terminal.js';
 import { VoiceOrchestrator } from '../services/voice/VoiceOrchestrator.js';
-import { createKimiLLMService } from '../services/llm/index.js';
+import { getChatService } from '../services/chat/ChatService.js';
 import { createVolcanoTTSService } from '../services/tts/index.js';
 
 /**
@@ -19,11 +19,8 @@ export function setupViberSocket(io) {
   // 创建管理器
   const manager = createViberSocketManager(io);
   
-  // 创建 LLM 服务
-  const llmService = createKimiLLMService({
-    apiKey: process.env.KIMI_API_KEY,
-    model: 'kimi-latest'
-  });
+  // 创建 Chat 服务 (kimi-cli)
+  const chatService = getChatService();
   
   // 创建 TTS 服务
   const ttsService = createVolcanoTTSService({
@@ -32,9 +29,9 @@ export function setupViberSocket(io) {
     voice: 'BV001_streaming'
   });
   
-  // 创建语音协调器（ASR → LLM → TTS）
+  // 创建语音协调器（ASR → LLM (kimi-cli) → TTS）
   const voiceOrchestrator = new VoiceOrchestrator({
-    llmService,
+    chatService,
     ttsService,
     socketManager: manager
   });
