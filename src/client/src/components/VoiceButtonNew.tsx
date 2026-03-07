@@ -102,7 +102,7 @@ export default function VoiceButtonNew({
         disabled={disabled}
         title={isStreaming ? '点击停止' : '点击开始语音'}
       >
-        <span className="voice-icon">
+        <span className={`voice-icon ${isStreaming ? 'active' : ''}`}>
           {isStreaming ? '🎤' : '🎙️'}
         </span>
         <span className="voice-status-text">
@@ -110,16 +110,33 @@ export default function VoiceButtonNew({
         </span>
       </button>
       
-      {/* 音量指示器 */}
+      {/* 音量指示器 - 活跃时显示 */}
       {isStreaming && (
-        <div className="volume-indicator">
-          <div 
-            className="volume-bar" 
-            style={{ 
-              width: `${Math.min(100, volume * 200)}%`,
-              backgroundColor: volume > 0.3 ? '#4CAF50' : '#2196F3'
-            }} 
-          />
+        <div className="volume-indicator-wrapper">
+          <div className="volume-dots">
+            {[...Array(5)].map((_, i) => (
+              <div 
+                key={i}
+                className="volume-dot"
+                style={{
+                  opacity: volume > (i * 0.2) ? 1 : 0.3,
+                  transform: volume > (i * 0.2) ? 'scale(1.2)' : 'scale(1)',
+                  backgroundColor: volume > 0.5 ? '#10b981' : (volume > 0.2 ? '#f59e0b' : '#64748b')
+                }}
+              />
+            ))}
+          </div>
+          <div className="volume-bar-container">
+            <div 
+              className="volume-bar-fill" 
+              style={{ 
+                width: `${Math.min(100, volume * 150)}%`,
+                background: volume > 0.5 
+                  ? 'linear-gradient(90deg, #10b981, #34d399)' 
+                  : 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+              }} 
+            />
+          </div>
         </div>
       )}
     </div>

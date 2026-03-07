@@ -303,12 +303,60 @@
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   border-color: #10b981;
   color: white;
-  animation: pulse-green 2s infinite;
+  animation: pulse-green 2s infinite, microphone-active 0.5s ease-in-out infinite alternate;
+}
+
+/* 麦克风活跃时的脉动效果 */
+@keyframes microphone-active {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6), 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  100% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 15px rgba(16, 185, 129, 0), 0 4px 16px rgba(16, 185, 129, 0.3);
+  }
+}
+
+/* 音量指示器样式 */
+.volume-indicator {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.volume-bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.1s ease, background-color 0.2s ease;
+  box-shadow: 0 0 8px currentColor;
 }
 
 .voice-icon {
   font-size: 20px;
   line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.voice-icon.active {
+  animation: icon-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes icon-pulse {
+  0%, 100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.8));
+  }
+  50% {
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 1));
+  }
 }
 
 .voice-status-text {
@@ -336,6 +384,50 @@
   font-size: 8px;
 }
 
+/* 音量指示器增强样式 */
+.volume-indicator-wrapper {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 60px;
+}
+
+.volume-dots {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+}
+
+.volume-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: all 0.15s ease;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+.volume-bar-container {
+  width: 100%;
+  height: 4px;
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.volume-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.1s ease;
+  box-shadow: 0 0 8px currentColor;
+}
+
 /* 暗黑模式适配 */
 @media (prefers-color-scheme: dark) {
   .voice-conversation-button,
@@ -346,5 +438,9 @@
   
   .voice-status-panel {
     background: var(--bg-secondary);
+  }
+  
+  .volume-bar-container {
+    background: rgba(255, 255, 255, 0.1);
   }
 }
