@@ -79,18 +79,22 @@ export class VolcanoTTSService {
 
       console.log(`[VolcanoTTSService] Request payload length: ${payload.length}, reqid: ${reqid}`);
 
-      // 构建二进制请求
+      // 构建二进制请求 - 火山引擎 V1 协议
+      // 协议格式: header(4) + length(4) + payload
+      // 参考 routes/voice.js 的实现
       const payloadBuf = Buffer.from(payload, 'utf8');
       const header = Buffer.alloc(4);
-      header.writeUInt8(0x11, 0);  // version=1, headerSize=1
-      header.writeUInt8(0x01, 1);  // msgType=1, flags=0
-      header.writeUInt8(0x01, 2);  // serialization=1, compression=0
-      header.writeUInt8(0x00, 3);  // reserved
+      header.writeUInt8(0x11, 0);   // version=1, headerSize=1
+      header.writeUInt8(0x10, 1);   // msgType=1 (0x1 << 4 = 0x10), flags=0
+      header.writeUInt8(0x10, 2);   // serialization=1 (0x1 << 4 = 0x10), compression=0
+      header.writeUInt8(0x00, 3);   // reserved
       
       const lengthBuf = Buffer.alloc(4);
       lengthBuf.writeUInt32BE(payloadBuf.length, 0);
       
       const requestBuffer = Buffer.concat([header, lengthBuf, payloadBuf]);
+      
+      console.log(`[VolcanoTTSService] Request header: ${header.toString('hex')}, payload length: ${payloadBuf.length}`);
 
       // WebSocket 连接
       const wsUrl = `${this.baseUrl}?appid=${this.appId}`;
