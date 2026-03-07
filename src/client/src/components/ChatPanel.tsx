@@ -940,7 +940,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
         handleKeyDown={handleKeyDown}
         stopGeneration={stopGeneration}
         handleVoiceTranscript={handleVoiceTranscript}
-      /}
+      />
 
 
     </div>
