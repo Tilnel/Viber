@@ -70,10 +70,11 @@ export class ChatService {
    * @param {number} options.sessionId - 会话ID
    * @param {string} options.content - 消息内容
    * @param {Object} options.context - 上下文信息 { currentFile, projectPath }
+   * @param {boolean} options.skipUserMessageSave - 是否跳过保存用户消息（用于语音对话，因为 ASR 结果已在前端保存）
    * @param {Object} handlers - 事件处理器
    */
   async sendMessage(options, handlers = {}) {
-    const { sessionId, content, context = {} } = options;
+    const { sessionId, content, context = {}, skipUserMessageSave = false } = options;
     const { onTextDelta, onToolCall, onToolResult, onComplete, onError } = handlers;
 
     if (!this.kimiPath) {
@@ -92,11 +93,13 @@ export class ChatService {
       throw new Error('Session not found');
     }
 
-    // 保存用户消息
-    await query(`
-      INSERT INTO messages (session_id, role, content, metadata)
-      VALUES ($1, 'user', $2, $3)
-    `, [sessionId, content, JSON.stringify(context)]);
+    // 保存用户消息（除非跳过）
+    if (!skipUserMessageSave) {
+      await query(`
+        INSERT INTO messages (session_id, role, content, metadata)
+        VALUES ($1, 'user', $2, $3)
+      `, [sessionId, content, JSON.stringify(context)]);
+    }
 
     // 获取历史消息
     const { rows: historyMessages } = await query(`

@@ -131,7 +131,8 @@ export class VoiceOrchestrator {
           content: userContent,
           context: {
             // 语音对话没有当前文件上下文，可以后续扩展
-          }
+          },
+          skipUserMessageSave: true // ASR 结果已由前端保存或不需要保存
         },
         {
           onTextDelta: (text) => {
