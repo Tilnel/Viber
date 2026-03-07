@@ -1,0 +1,215 @@
+.chat-input-container {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  position: relative;
+}
+
+/* 拖动调整高度手柄 */
+.resize-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 12px;
+  margin: -8px -12px 4px;
+  cursor: ns-resize;
+  position: relative;
+  transition: background-color 0.2s;
+}
+
+.resize-handle:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.resize-handle.resizing {
+  background-color: var(--accent-color-alpha, rgba(59, 130, 246, 0.1));
+}
+
+.resize-handle-bar {
+  width: 40px;
+  height: 4px;
+  background-color: var(--border-color);
+  border-radius: 2px;
+  transition: background-color 0.2s, width 0.2s;
+}
+
+.resize-handle:hover .resize-handle-bar,
+.resize-handle.resizing .resize-handle-bar {
+  background-color: var(--accent-color);
+  width: 60px;
+}
+
+/* 上下文提示 */
+.context-hint {
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.char-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* 输入区域包装器 */
+.chat-input-wrapper {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  min-height: 60px;
+}
+
+/* 文本输入框 */
+.chat-input {
+  flex: 1;
+  min-height: 40px;
+  max-height: 100%;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  font-family: inherit;
+  overflow-y: auto;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-color-alpha, rgba(59, 130, 246, 0.1));
+}
+
+/* 垂直排列的操作按钮 */
+.chat-actions-vertical {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.action-buttons-top {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-buttons-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 按钮样式 */
+.chat-actions-vertical .send-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  border-radius: 8px;
+}
+
+.chat-actions-vertical .send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 语音按钮适配 */
+.chat-actions-vertical .voice-conversation-wrapper {
+  width: 40px;
+}
+
+.chat-actions-vertical .voice-conversation-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+}
+
+.chat-actions-vertical .voice-conversation-btn .voice-icon {
+  font-size: 16px;
+}
+
+.chat-actions-vertical .voice-conversation-btn .voice-status-text {
+  font-size: 9px;
+  display: none;
+}
+
+.chat-actions-vertical .voice-conversation-btn.active .voice-status-text {
+  display: block;
+}
+
+/* TTS 控制按钮适配 */
+.chat-actions-vertical .tts-control-fab {
+  position: static;
+  width: 40px;
+  height: 40px;
+}
+
+.chat-actions-vertical .tts-control-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 16px;
+  border-radius: 8px;
+  position: static;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 输入提示 */
+.input-hint {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.resize-hint {
+  opacity: 0.7;
+}
+
+/* 语音识别中的消息样式 */
+.message.voice-transcript {
+  opacity: 0.9;
+  animation: pulse 2s infinite;
+}
+
+.message.voice-transcript .message-avatar {
+  background: var(--accent-color-alpha, rgba(59, 130, 246, 0.2));
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* 语音识别的徽章 */
+.stt-badge {
+  display: inline-block;
+  font-size: 10px;
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-color-hover));
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}

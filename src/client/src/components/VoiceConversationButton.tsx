@@ -98,5 +98,8 @@ export default function VoiceConversationButton({
   );
 }
 
-export { volcanoTTSService } from '../services/volcanoTTS';
-export { piperTTSService } from '../services/piperTTS';
+import { piperTTSService as piperService } from '../services/piperTTS';
+import { volcanoTTSService as volcanoService } from '../services/volcanoTTS';
+
+export { piperService as piperTTSService };
+export { volcanoService as volcanoTTSService };

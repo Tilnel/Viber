@@ -7,10 +7,9 @@ import { useProjectStore } from '../stores/project';
 import { chatAPI, projectAPI, type StreamEvent } from '../services/api';
 import { useSettingsStore } from '../stores/settings';
 import { loadVoiceConfig, VoiceConfig } from '../services/voiceConfig';
-import VoiceConversationButton, { piperTTSService } from './VoiceConversationButton';
-import { volcanoTTSService } from '../services/volcanoTTS';
-import TTSControl from './TTSControl';
+import { piperTTSService, volcanoTTSService } from './VoiceConversationButton';
 import ToolCallBlock from './ToolCallBlock';
+import ResizableInputArea from './ResizableInputArea';
 import type { ChatMessage, ChatSession } from '../../../shared/types';
 import './ChatPanel.css';
 import { cleanTextForTTSStreaming } from '../utils/ttsTextCleaner';
@@ -432,6 +431,9 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
   const processingVoiceRef = useRef<string | null>(null);
   const processingVoiceTimeRef = useRef<number>(0);
 
+  // 语音识别的临时消息（显示在左侧）
+  const [voiceTranscriptMessage, setVoiceTranscriptMessage] = useState<{text: string; id: number} | null>(null);
+
   const handleVoiceTranscript = async (transcript: string) => {
     // 防重复检查
     const now = Date.now();
@@ -466,8 +468,16 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     }
     
     console.log('[ChatPanel] Processing voice transcript:', transcript);
+    
+    // 在左侧显示语音识别结果（临时消息）
+    const tempId = Date.now();
+    setVoiceTranscriptMessage({ text: transcript, id: tempId });
+    
     const isFirstMessage = messages.length === 0;
     await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
+    
+    // 发送完成后清除临时消息
+    setVoiceTranscriptMessage(null);
   };
 
   // AI 回复文本收集（用于语音对话TTS）
@@ -906,65 +916,31 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           </div>
         )}
         
+        {/* 语音识别中的临时消息 */}
+        {voiceTranscriptMessage && (
+          <div className="message user voice-transcript">
+            <div className="message-avatar">🎤</div>
+            <div className="message-content">
+              <div className="stt-badge">语音识别中...</div>
+              <div className="message-text">{voiceTranscriptMessage.text}</div>
+            </div>
+          </div>
+        )}
+        
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <div className="chat-input-container">
-        <div className="context-hint">
-          {useProjectStore.getState().activeFilePath && (
-            <span className="current-file">
-              📄 {useProjectStore.getState().activeFilePath?.split('/').pop()}
-            </span>
-          )}
-        </div>
-        
-        <div className="chat-input-wrapper">
-          <textarea
-            ref={inputRef}
-            className="chat-input"
-            placeholder="输入消息... (Ctrl+Enter 发送)"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={1}
-            disabled={isStreaming}
-          />
-          
-          <div className="chat-actions">
-            <TTSControl />
-            <VoiceConversationButton 
-              onUserSpeech={handleVoiceTranscript}
-              onInterrupt={() => {
-                // 用户打断AI回复 - 立即停止生成
-                console.log('[ChatPanel] User interrupted, stopping generation');
-                stopGeneration();
-              }}
-            />
-            {isStreaming ? (
-              <button 
-                className="btn btn-danger send-btn"
-                onClick={stopGeneration}
-                title="停止生成"
-              >
-                ⏹
-              </button>
-            ) : (
-              <button 
-                className="btn btn-primary send-btn"
-                onClick={handleSend}
-                disabled={!inputText.trim()}
-              >
-                ➤
-              </button>
-            )}
-          </div>
-        </div>
-        
-        <div className="input-hint">
-          Ctrl + Enter 发送
-        </div>
-      </div>
+      <ResizableInputArea 
+        inputText={inputText}
+        setInputText={setInputText}
+        inputRef={inputRef}
+        isStreaming={isStreaming}
+        handleSend={handleSend}
+        handleKeyDown={handleKeyDown}
+        stopGeneration={stopGeneration}
+        handleVoiceTranscript={handleVoiceTranscript}
+      /}
 
 
     </div>
