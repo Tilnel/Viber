@@ -21,10 +21,17 @@ export default function VoiceButtonNew({
   const [volume, setVolume] = useState(0);
   const serviceRef = useRef<NewVoiceService | null>(null);
 
-  // 初始化服务
+  // 初始化服务 - 只在组件挂载时执行一次
   useEffect(() => {
+    // 使用 ref 存储回调，避免重新创建服务
+    const callbacksRef = {
+      onUserSpeech,
+      onInterimSpeech
+    };
+    
     serviceRef.current = getNewVoiceService({
       onStateChange: (state) => {
+        console.log('[VoiceButtonNew] State changed to:', state);
         setIsStreaming(state === 'streaming');
       },
       onVolume: (vol) => {
@@ -32,25 +39,25 @@ export default function VoiceButtonNew({
       },
       onTranscript: (text, isFinal) => {
         if (isFinal) {
-          console.log('[VoiceButtonNew] Final:', text);
-          onUserSpeech(text);
+          console.log('[VoiceButtonNew] Final transcript:', text);
+          callbacksRef.onUserSpeech(text);
         } else {
-          onInterimSpeech?.(text);
+          callbacksRef.onInterimSpeech?.(text);
         }
       },
       onError: (error) => {
-        console.error('[VoiceButtonNew] Error triggered:', error);
-        console.trace('[VoiceButtonNew] Error stack trace');
+        console.error('[VoiceButtonNew] Error:', error);
         toast.error(`语音错误: ${error || '未知错误'}`);
-        // 不要自动停止，让用户手动控制
-        // stopStreaming();
       }
     });
 
+    // 组件卸载时才停止
     return () => {
-      stopStreaming();
+      console.log('[VoiceButtonNew] Component unmounting, stopping voice...');
+      serviceRef.current?.stop();
     };
-  }, [onUserSpeech, onInterimSpeech]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);  // 空依赖数组，只在挂载时执行
 
   const startStreaming = useCallback(async () => {
     const service = serviceRef.current;
@@ -65,13 +72,19 @@ export default function VoiceButtonNew({
   }, []);
 
   const stopStreaming = useCallback(() => {
+    console.log('[VoiceButtonNew] stopStreaming called');
     serviceRef.current?.stop();
     setIsStreaming(false);
     setVolume(0);
   }, []);
 
   const toggle = useCallback(async () => {
-    if (isStreaming) {
+    const currentService = serviceRef.current;
+    const isCurrentlyStreaming = currentService?.isStreaming() || false;
+    
+    console.log('[VoiceButtonNew] Toggle clicked, currently streaming:', isCurrentlyStreaming);
+    
+    if (isCurrentlyStreaming) {
       stopStreaming();
     } else {
       const success = await startStreaming();
@@ -79,7 +92,7 @@ export default function VoiceButtonNew({
         toast.error('启动失败，请检查麦克风权限');
       }
     }
-  }, [isStreaming, startStreaming, stopStreaming]);
+  }, [startStreaming, stopStreaming]);
 
   return (
     <div className="voice-conversation-wrapper">
