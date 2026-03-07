@@ -41,13 +41,17 @@ export class VolcanoTTSService {
    * @returns {Promise<{audioData: Buffer, format: string, duration: number}>}
    */
   async synthesize(text, options = {}) {
+    console.log(`[VolcanoTTSService] synthesize() called, text length: ${text?.length}, appId: ${this.appId ? 'set' : 'NOT SET'}, token: ${this.token ? 'set' : 'NOT SET'}`);
+    
     if (!this.appId || !this.token) {
-      throw new Error('Volcano TTS not configured');
+      throw new Error('Volcano TTS not configured - check VOLCANO_APP_ID and VOLCANO_ACCESS_TOKEN env vars');
     }
 
     return new Promise((resolve, reject) => {
       const voice = options.voice || this.defaultVoice;
       const speed = options.speed || 1.0;
+      
+      console.log(`[VolcanoTTSService] Using voice: ${voice}, speed: ${speed}`);
       
       // 构建请求
       const reqid = crypto.randomUUID();
@@ -73,6 +77,8 @@ export class VolcanoTTSService {
         }
       });
 
+      console.log(`[VolcanoTTSService] Request payload length: ${payload.length}, reqid: ${reqid}`);
+
       // 构建二进制请求
       const payloadBuf = Buffer.from(payload, 'utf8');
       const header = Buffer.alloc(4);
@@ -88,6 +94,8 @@ export class VolcanoTTSService {
 
       // WebSocket 连接
       const wsUrl = `${this.baseUrl}?appid=${this.appId}`;
+      console.log(`[VolcanoTTSService] Connecting to WebSocket: ${wsUrl.substring(0, 60)}...`);
+      
       const ws = new WebSocket(wsUrl, {
         headers: { 'Authorization': `Bearer;${this.token}` },
         skipUTF8Validation: true
@@ -95,21 +103,30 @@ export class VolcanoTTSService {
 
       const audioChunks = [];
       let isCompleted = false;
+      let messageCount = 0;
 
       ws.on('open', () => {
+        console.log(`[VolcanoTTSService] WebSocket connected, sending request...`);
         ws.send(requestBuffer);
       });
 
       ws.on('message', (data) => {
-        if (!Buffer.isBuffer(data) || data.length < 8) return;
+        messageCount++;
+        if (!Buffer.isBuffer(data) || data.length < 8) {
+          console.log(`[VolcanoTTSService] Received invalid message #${messageCount}, length: ${data?.length}`);
+          return;
+        }
 
         const seqSigned = data.readInt32BE(4);
         const msgType = (data[1] >> 4) & 0x0f;
         const isLast = seqSigned < 0;
 
+        console.log(`[VolcanoTTSService] Message #${messageCount}: type=0x${msgType.toString(16)}, seq=${seqSigned}, isLast=${isLast}, dataLen=${data.length}`);
+
         // 错误消息
         if (msgType === 0x0f) {
           const errorText = data.slice(8).toString('utf8');
+          console.error(`[VolcanoTTSService] TTS error from server: ${errorText}`);
           reject(new Error(`TTS error: ${errorText}`));
           ws.close();
           return;
@@ -120,31 +137,37 @@ export class VolcanoTTSService {
           const audioData = data.slice(8);
           if (audioData.length > 0) {
             audioChunks.push(audioData);
+            console.log(`[VolcanoTTSService] Audio chunk received: ${audioData.length} bytes, total chunks: ${audioChunks.length}`);
           }
 
           if (isLast) {
+            console.log(`[VolcanoTTSService] Last message received, closing WebSocket`);
             ws.close();
           }
         }
       });
 
       ws.on('close', () => {
+        console.log(`[VolcanoTTSService] WebSocket closed, isCompleted=${isCompleted}, audioChunks=${audioChunks.length}`);
         if (!isCompleted) {
           isCompleted = true;
           if (audioChunks.length > 0) {
             const finalBuffer = Buffer.concat(audioChunks);
+            console.log(`[VolcanoTTSService] Resolving with ${finalBuffer.length} bytes of audio`);
             resolve({
               audioData: finalBuffer,
               format: 'mp3',
               duration: this.estimateDuration(text)
             });
           } else {
+            console.error(`[VolcanoTTSService] No audio chunks received!`);
             reject(new Error('No audio received'));
           }
         }
       });
 
       ws.on('error', (err) => {
+        console.error(`[VolcanoTTSService] WebSocket error:`, err.message);
         if (!isCompleted) {
           isCompleted = true;
           reject(err);
@@ -154,6 +177,7 @@ export class VolcanoTTSService {
       // 超时
       setTimeout(() => {
         if (!isCompleted) {
+          console.error(`[VolcanoTTSService] TTS timeout after 30s`);
           isCompleted = true;
           ws.close();
           reject(new Error('TTS timeout'));

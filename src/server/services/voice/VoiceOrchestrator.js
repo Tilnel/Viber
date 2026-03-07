@@ -283,30 +283,51 @@ export class VoiceOrchestrator {
    */
   async synthesizeAndPlay(streamId, text) {
     const dialog = this.dialogs.get(streamId);
-    if (!dialog) return;
+    if (!dialog) {
+      console.log(`[VoiceOrchestrator] TTS skipped: dialog not found for ${streamId}`);
+      return;
+    }
 
-    console.log(`[VoiceOrchestrator] TTS for ${streamId}: "${text.substring(0, 50)}..."`);
+    if (!text || !text.trim()) {
+      console.log(`[VoiceOrchestrator] TTS skipped: empty text`);
+      return;
+    }
+
+    console.log(`[VoiceOrchestrator] TTS START for ${streamId}: "${text.substring(0, 50)}..." (${text.length} chars)`);
     
     try {
-      console.log(`[VoiceOrchestrator] Calling TTS service...`);
+      console.log(`[VoiceOrchestrator] Calling TTS service.synthesize()...`);
       const result = await this.ttsService.synthesize(text);
-      console.log(`[VoiceOrchestrator] TTS result: ${result.audioData?.length || 0} bytes, format: ${result.format}`);
+      console.log(`[VoiceOrchestrator] TTS synthesize() returned: audioData=${result?.audioData?.length || 0} bytes, format=${result?.format}, duration=${result?.duration}`);
+      
+      if (!result || !result.audioData || result.audioData.length === 0) {
+        console.error(`[VoiceOrchestrator] TTS returned empty audio!`);
+        return;
+      }
+      
+      // 转换为 base64
+      const audioBase64 = result.audioData.toString('base64');
+      console.log(`[VoiceOrchestrator] TTS audio base64 length: ${audioBase64.length}`);
       
       // 发送音频给前端播放
-      this.socketManager.sendToSocket(dialog.socketId, {
+      const message = {
         type: 'speaker:play',
         data: {
           taskId: `tts_${Date.now()}`,
           type: 'response',
           text,
-          audioData: result.audioData.toString('base64'),
+          audioData: audioBase64,
           format: result.format || 'mp3',
           duration: result.duration
         }
-      });
+      };
+      
+      console.log(`[VoiceOrchestrator] Sending speaker:play to socket ${dialog.socketId}, taskId=${message.data.taskId}`);
+      this.socketManager.sendToSocket(dialog.socketId, message);
+      console.log(`[VoiceOrchestrator] speaker:play sent successfully`);
       
     } catch (error) {
-      console.error(`[VoiceOrchestrator] TTS error:`, error);
+      console.error(`[VoiceOrchestrator] TTS error in synthesizeAndPlay:`, error.message, error.stack);
     }
   }
 

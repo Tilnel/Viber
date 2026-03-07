@@ -223,14 +223,18 @@ export class ViberSocketManager {
    * 发送消息给指定 socket
    */
   sendToSocket(socketId, message) {
+    console.log(`[ViberSocket] sendToSocket to ${socketId}, type=${message?.type}`);
     const socket = this.namespace.sockets.get(socketId);
     if (socket) {
-      socket.emit('message', {
+      const fullMessage = {
         ...message,
         timestamp: Date.now()
-      });
+      };
+      console.log(`[ViberSocket] Emitting message to socket ${socketId}`);
+      socket.emit('message', fullMessage);
       return true;
     }
+    console.log(`[ViberSocket] Socket ${socketId} not found!`);
     return false;
   }
 

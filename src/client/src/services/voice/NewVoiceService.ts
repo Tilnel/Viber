@@ -11,6 +11,7 @@
 
 import { SimpleRecorder } from './SimpleRecorder';
 import { getViberSocket, ViberMessageType, resetViberSocket } from '../viberSocket';
+import { getSpeakerController } from './SpeakerController';
 
 // 获取认证 token
 function getAuthToken(): string {
@@ -24,6 +25,7 @@ export interface NewVoiceServiceOptions {
   onVolume?: (volume: number) => void;  // 用于前端音量显示
   onTranscript?: (text: string, isFinal: boolean) => void;
   onError?: (error: string) => void;
+  onSpeakerStateChange?: (state: 'idle' | 'playing' | 'paused') => void;
 }
 
 /**
@@ -205,6 +207,37 @@ export class NewVoiceService {
       this.options.onTranscript?.(data.text, true);
     });
     
+    // TTS 播放指令
+    this.socket.on(ViberMessageType.SPEAKER_PLAY, (data) => {
+      console.log('[NewVoiceService] Received TTS task:', data.taskId);
+      const speaker = getSpeakerController({
+        onStateChange: (state) => {
+          this.options.onSpeakerStateChange?.(state);
+        }
+      });
+      
+      // Base64 转 ArrayBuffer
+      const audioData = data.audioData 
+        ? this.base64ToArrayBuffer(data.audioData)
+        : undefined;
+      
+      speaker.enqueue({
+        id: data.taskId,
+        type: data.type,
+        text: data.text,
+        audioData,
+        format: data.format,
+        duration: data.duration
+      });
+    });
+    
+    // TTS 停止指令
+    this.socket.on(ViberMessageType.SPEAKER_STOP, () => {
+      console.log('[NewVoiceService] Received stop speaker');
+      const speaker = getSpeakerController();
+      speaker.stopAll();
+    });
+    
     // 错误
     this.socket.on(ViberMessageType.ERROR, (data) => {
       const isRelevant = !data?.context?.streamId || data.context.streamId === this.streamId;
@@ -213,6 +246,18 @@ export class NewVoiceService {
         this.options.onError?.(errorMsg);
       }
     });
+  }
+
+  /**
+   * Base64 转 ArrayBuffer
+   */
+  private base64ToArrayBuffer(base64: string): ArrayBuffer {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
   }
 
   /**
