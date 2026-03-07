@@ -84,6 +84,10 @@ export class NewVoiceService {
     
     this.setState('connecting');
     
+    // 帧计数器用于日志
+    let frameCount = 0;
+    let lastLogTime = Date.now();
+    
     // 1. 初始化录音器（纯采集，无 VAD）
     this.recorder = new SimpleRecorder({
       sampleRate: 16000,
@@ -95,6 +99,21 @@ export class NewVoiceService {
         // 持续推送音频到后端
         if (this.streamId) {
           this.socket.sendAudio(this.streamId, frame, this.audioSeq++);
+          frameCount++;
+          
+          // 每秒打印一次发送统计
+          const now = Date.now();
+          if (now - lastLogTime > 1000) {
+            console.log(`[NewVoiceService] Sent ${frameCount} frames in last second, total seq: ${this.audioSeq}`);
+            frameCount = 0;
+            lastLogTime = now;
+          }
+        } else {
+          // streamId 还没收到，丢弃音频
+          if (frameCount === 0) {
+            console.log('[NewVoiceService] Waiting for streamId, dropping audio frames...');
+          }
+          frameCount++;
         }
       },
       onVolume: (volume) => {
@@ -102,6 +121,7 @@ export class NewVoiceService {
         this.options.onVolume?.(volume);
       },
       onError: (error) => {
+        console.error('[NewVoiceService] Recorder error:', error);
         this.options.onError?.(error);
         this.stop();
       }
@@ -199,8 +219,9 @@ export class NewVoiceService {
     
     // 错误
     this.socket.on(ViberMessageType.ERROR, (data) => {
-      if (data.context?.streamId === this.streamId) {
-        this.options.onError?.(data.message);
+      console.error('[NewVoiceService] Received error:', data);
+      if (data.context?.streamId === this.streamId || !data.context?.streamId) {
+        this.options.onError?.(data.message || data.error?.message || 'Unknown error');
       }
     });
   }

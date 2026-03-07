@@ -86,6 +86,7 @@ export function createVoiceHandlers() {
       
       // 设置 ASR 回调
       asrSession.on('interim', (result) => {
+        console.log(`[VoiceHandler] ASR interim: "${result.text}"`);
         socket.emit('message', {
           type: 'voice:asr:interim',
           data: {
@@ -96,6 +97,7 @@ export function createVoiceHandlers() {
       });
       
       asrSession.on('final', (result) => {
+        console.log(`[VoiceHandler] ASR final: "${result.text}", duration: ${result.duration}ms`);
         streamInfo.transcript = result.text;
         socket.emit('message', {
           type: 'voice:asr:final',
@@ -104,6 +106,19 @@ export function createVoiceHandlers() {
             text: result.text,
             confidence: result.confidence
           }
+        });
+        
+        // 注意：这里不自动停止，让用户决定何时停止
+        // 如果需要自动停止，可以在这里调用 stop
+      });
+      
+      asrSession.on('ended', () => {
+        console.log(`[VoiceHandler] ASR session ended for ${streamId}`);
+        // ASR 会话结束（火山引擎可能自动结束）
+        // 通知前端
+        socket.emit('message', {
+          type: 'voice:ended',
+          data: { streamId, reason: 'asr_session_ended' }
         });
       });
       
@@ -132,8 +147,14 @@ export function createVoiceHandlers() {
     'voice:audio': async (socket, data) => {
       const { streamId, seq, audio, timestamp } = data;
       
+      // 每100帧打印一次日志
+      if (seq % 100 === 0) {
+        console.log(`[VoiceHandler] Received audio frame seq=${seq} from ${socket.id}`);
+      }
+      
       const stream = activeStreams.get(streamId);
       if (!stream) {
+        console.warn(`[VoiceHandler] Stream not found: ${streamId}`);
         return socket.emit('message', {
           type: 'error',
           data: {
@@ -145,6 +166,7 @@ export function createVoiceHandlers() {
       }
       
       if (!stream.isRecording) {
+        console.log(`[VoiceHandler] Stream ${streamId} not recording, dropping frame`);
         return; // 忽略非录音状态的音频
       }
       
@@ -155,11 +177,13 @@ export function createVoiceHandlers() {
         // 计算音量（用于前端可视化）
         const volume = calculateVolume(pcmBuffer);
         
-        // 发送音量反馈
-        socket.emit('message', {
-          type: 'voice:volume',
-          data: { streamId, volume }
-        });
+        // 每50帧发送一次音量反馈
+        if (seq % 50 === 0) {
+          socket.emit('message', {
+            type: 'voice:volume',
+            data: { streamId, volume }
+          });
+        }
         
         // 发送到 ASR (必须 await，否则未处理的异常会导致连接断开)
         await stream.asrSession.sendAudio(pcmBuffer);
