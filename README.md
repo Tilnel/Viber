@@ -1,6 +1,8 @@
-# Kimi Code Web Assistant
+# viber
 
-基于 Kimi Code CLI 的智能代码助手 Web 服务，支持实时双工语音对话、项目文件管理、代码编辑和版本控制。
+**VoIce & Intelligence Backed EditoR**
+
+基于语音交互的智能代码编辑器，支持实时双工语音对话、项目文件管理、代码编辑和版本控制。viber 让你用自然语言与 AI 协作编程，实现真正的 "vibe coding" 体验。
 
 ## ✨ 核心功能
 
@@ -21,9 +23,10 @@
 - AI 修改文件的 Diff 展示
 
 ### 4. 语音对话
-- 浏览器 Web Speech API 语音识别
-- Edge TTS 语音合成（待集成）
-- 实时语音波形可视化
+- **火山引擎 ASR** - 实时语音识别
+- **多引擎 TTS** - Edge TTS / Piper TTS / 火山 TTS
+- 语音波形可视化
+- 打断与恢复功能
 
 ### 5. 版本控制
 - Git 状态显示
@@ -63,7 +66,7 @@
 
 1. 克隆仓库
 ```bash
-cd kimi-code-web-assistant
+cd viber
 ```
 
 2. 运行启动脚本
@@ -79,8 +82,8 @@ npm install
 cd src/client && npm install && cd ../..
 
 # 配置 PostgreSQL
-sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'haruhikage';"
-sudo -u postgres psql -c "CREATE DATABASE kimi_assistant;"
+sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'your_password';"
+sudo -u postgres psql -c "CREATE DATABASE viber;"
 
 # 运行数据库迁移
 npm run db:migrate
@@ -105,14 +108,13 @@ docker-compose logs -f app
 ## 📁 项目结构
 
 ```
-kimi-code-web-assistant/
+viber/
 ├── src/
 │   ├── server/          # 后端代码
 │   │   ├── db/          # 数据库连接和迁移
 │   │   ├── middleware/  # Express 中间件
 │   │   ├── routes/      # API 路由
 │   │   ├── services/    # 业务逻辑
-│   │   ├── socket/      # Socket.io 处理器
 │   │   └── utils/       # 工具函数
 │   ├── client/          # 前端代码
 │   │   ├── src/
@@ -137,14 +139,19 @@ kimi-code-web-assistant/
 # Database
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=kimi_assistant
+DB_NAME=viber
 DB_USER=postgres
-DB_PASSWORD=haruhikage
+DB_PASSWORD=your_password
 
 # Server
 PORT=3000
 ROOT_DIR=/path/to/your/code
 AUTH_TOKEN=your-secret-token
+
+# 火山引擎 ASR/TTS (可选)
+VOLCANO_APP_ID=your_app_id
+VOLCANO_ACCESS_TOKEN=your_token
+VOLCANO_CLUSTER=volcengine_streaming_common
 ```
 
 ## ⌨️ 快捷键
@@ -161,13 +168,13 @@ AUTH_TOKEN=your-secret-token
 
 ## 🎤 语音功能说明
 
-由于 Kimi CLI 本身不支持原生语音输入/输出，我们采用以下方案：
+viber 采用先进的语音交互方案：
 
-1. **STT（语音转文字）**: 浏览器 Web Speech API
+1. **STT（语音转文字）**: 火山引擎流式语音识别
 2. **AI 处理**: Kimi CLI 处理文本
-3. **TTS（文字转语音）**: Edge TTS（待集成）
+3. **TTS（文字转语音）**: 多引擎支持（Edge TTS / Piper TTS / 火山 TTS）
 
-当语音识别结果不确定时，Kimi 会询问用户确认。
+语音识别结果实时显示在输入框，用户可编辑后发送。
 
 ## 🔒 安全性
 

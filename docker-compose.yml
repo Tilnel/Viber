@@ -10,7 +10,7 @@ services:
       - PORT=3000
       - DB_HOST=db
       - DB_PORT=5432
-      - DB_NAME=kimi_assistant
+      - DB_NAME=viber
       - DB_USER=postgres
       - DB_PASSWORD=${DB_PASSWORD:-haruhikage}
       - ROOT_DIR=/code
@@ -25,7 +25,7 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_DB=kimi_assistant
+      - POSTGRES_DB=viber
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${DB_PASSWORD:-haruhikage}
     volumes:

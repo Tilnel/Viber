@@ -1,7 +1,7 @@
 {
-  "name": "kimi-code-web-assistant",
+  "name": "viber",
   "version": "1.0.0",
-  "description": "Web-based AI code assistant with voice capabilities",
+  "description": "VoIce & Intelligence Backed EditoR - Voice-driven AI code editor"
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",

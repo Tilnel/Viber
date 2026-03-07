@@ -22,7 +22,7 @@ export default function Header() {
     <header className="app-header">
       <div className="header-brand" onClick={() => navigate('/')}>
         <span className="brand-icon">🌙</span>
-        <span className="brand-text">Kimi Code</span>
+        <span className="brand-text">viber</span>
       </div>
       
       <div className="header-actions">

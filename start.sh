@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🚀 Kimi Code Web Assistant 启动脚本"
+echo "🚀 viber 启动脚本"
 echo "================================"
 
 # Colors

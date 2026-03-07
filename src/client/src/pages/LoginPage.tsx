@@ -40,7 +40,7 @@ export default function LoginPage() {
       <div className="login-container">
         <div className="login-logo">
           <span className="logo-icon">🌙</span>
-          <h1>Kimi Code Web Assistant</h1>
+          <h1>viber</h1>
         </div>
         
         <form className="login-form" onSubmit={handleLogin}>

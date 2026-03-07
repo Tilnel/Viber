@@ -469,11 +469,15 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       return;
     }
     
-    console.log('[ChatPanel] Final voice transcript, sending:', transcript);
+    console.log('[ChatPanel] Final voice transcript, filling to input:', transcript);
     
-    // 直接发送消息
-    const isFirstMessage = messages.length === 0;
-    await sendMessageWithVoice(currentSession.id, transcript, isFirstMessage);
+    // 语音结果回填到输入框，让用户确认后手动发送
+    setInputText(prev => {
+      if (prev && prev.trim()) {
+        return prev + '\n' + transcript;  // 追加到现有内容
+      }
+      return transcript;
+    });
   };
 
   // AI 回复文本收集（用于语音对话TTS）
@@ -846,7 +850,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       <div className="chat-messages">
         {!currentSession ? (
           <div className="chat-welcome no-session">
-            <h3>👋 欢迎使用 Kimi AI 助手</h3>
+            <h3>👋 欢迎使用 viber</h3>
             <p>请先创建一个会话开始对话</p>
             <button 
               className="btn btn-primary create-session-btn" 
@@ -857,7 +861,7 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
           </div>
         ) : messages.length === 0 && streamingBlocks.length === 0 && (
           <div className="chat-welcome">
-            <h3>🤖 Kimi AI 助手</h3>
+            <h3>🤖 viber AI 助手</h3>
             <p>我可以帮你：</p>
             <ul>
               <li>💬 回答编程问题</li>

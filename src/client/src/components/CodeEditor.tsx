@@ -187,7 +187,7 @@ export default function CodeEditor() {
     return (
       <div className="code-editor-empty">
         <div className="welcome-content">
-          <h2>🌙 Kimi Code Web Assistant</h2>
+          <h2>viber</h2>
           <p>打开文件开始编辑</p>
           <div className="shortcuts">
             <div className="shortcut">
