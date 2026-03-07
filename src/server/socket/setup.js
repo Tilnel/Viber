@@ -22,11 +22,12 @@ export function setupViberSocket(io) {
   // 创建 Chat 服务 (kimi-cli)
   const chatService = getChatService();
   
-  // 创建 TTS 服务
+  // 创建 TTS 服务（配置从环境变量读取，与前端统一）
   const ttsService = createVolcanoTTSService({
     appId: process.env.VOLCANO_APP_ID,
     token: process.env.VOLCANO_ACCESS_TOKEN,
-    voice: 'BV001_streaming'
+    voice: process.env.VOLCANO_TTS_VOICE || 'BV001_streaming',
+    speed: parseFloat(process.env.VOLCANO_TTS_SPEED) || 1.0
   });
   
   // 创建语音协调器（ASR → LLM (kimi-cli) → TTS）

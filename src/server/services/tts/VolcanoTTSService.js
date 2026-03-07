@@ -10,13 +10,17 @@ import WebSocket from 'ws';
 import crypto from 'crypto';
 
 /**
- * 火山引擎配置
+ * 火山引擎配置 - 与前端 voiceConfig.ts 保持一致
  */
 const CONFIG = {
   APPID: process.env.VOLCANO_APP_ID,
   TOKEN: process.env.VOLCANO_ACCESS_TOKEN,
-  DEFAULT_VOICE: 'BV001_streaming',
-  WS_URL: 'wss://openspeech.bytedance.com/api/v1/tts/ws_binary'
+  DEFAULT_VOICE: process.env.VOLCANO_TTS_VOICE || 'BV001_streaming',
+  DEFAULT_SPEED: parseFloat(process.env.VOLCANO_TTS_SPEED) || 1.0,
+  WS_URL: 'wss://openspeech.bytedance.com/api/v1/tts/ws_binary',
+  // 文本分段配置（与前端保持一致）
+  MAX_CHARS_PER_SEGMENT: 300,
+  MAX_BYTES_PER_SEGMENT: 900
 };
 
 /**
@@ -27,29 +31,97 @@ export class VolcanoTTSService {
     this.appId = config.appId || CONFIG.APPID;
     this.token = config.token || CONFIG.TOKEN;
     this.defaultVoice = config.voice || CONFIG.DEFAULT_VOICE;
+    this.defaultSpeed = config.speed || CONFIG.DEFAULT_SPEED;
     this.baseUrl = config.baseUrl || CONFIG.WS_URL;
 
     if (!this.appId || !this.token) {
       console.warn('[VolcanoTTSService] Warning: VOLCANO_APP_ID or VOLCANO_ACCESS_TOKEN not set');
     }
+    
+    console.log(`[VolcanoTTSService] Initialized with voice: ${this.defaultVoice}, speed: ${this.defaultSpeed}`);
   }
 
   /**
-   * 合成语音
-   * @param {string} text - 要合成的文本
-   * @param {Object} options - 选项
-   * @returns {Promise<{audioData: Buffer, format: string, duration: number}>}
+   * 将长文本拆分成多个片段（避免超过1024字节限制）
+   * 与前端 splitTextForTTS 保持一致
    */
-  async synthesize(text, options = {}) {
-    console.log(`[VolcanoTTSService] synthesize() called, text length: ${text?.length}, appId: ${this.appId ? 'set' : 'NOT SET'}, token: ${this.token ? 'set' : 'NOT SET'}`);
+  splitTextForTTS(text) {
+    const maxChars = CONFIG.MAX_CHARS_PER_SEGMENT;
+    const maxBytes = CONFIG.MAX_BYTES_PER_SEGMENT;
+    const segments = [];
     
-    if (!this.appId || !this.token) {
-      throw new Error('Volcano TTS not configured - check VOLCANO_APP_ID and VOLCANO_ACCESS_TOKEN env vars');
+    // 计算UTF-8字节长度
+    const byteLength = (str) => Buffer.byteLength(str, 'utf8');
+    
+    // 按句子拆分（优先在句号、问号、感叹号处分割）
+    const sentences = text.split(/([。！？.!?；;\n]+)/);
+    let currentSegment = '';
+    
+    for (let i = 0; i < sentences.length; i++) {
+      const part = sentences[i];
+      if (!part) continue;
+      
+      const combined = currentSegment + part;
+      // 检查字符数和字节数
+      if (combined.length <= maxChars && byteLength(combined) <= maxBytes) {
+        currentSegment = combined;
+      } else {
+        // 当前段已满，保存并开始新段
+        if (currentSegment.trim()) {
+          segments.push(currentSegment.trim());
+        }
+        // 如果单段就超限，需要强制拆分
+        if (part.length > maxChars || byteLength(part) > maxBytes) {
+          let subSegment = '';
+          for (const char of part) {
+            const test = subSegment + char;
+            if (test.length > maxChars || byteLength(test) > maxBytes) {
+              if (subSegment.trim()) {
+                segments.push(subSegment.trim());
+              }
+              subSegment = char;
+            } else {
+              subSegment = test;
+            }
+          }
+          currentSegment = subSegment;
+        } else {
+          currentSegment = part;
+        }
+      }
     }
+    
+    // 添加最后一段
+    if (currentSegment.trim()) {
+      segments.push(currentSegment.trim());
+    }
+    
+    // 最终检查：确保每段都不超限
+    return segments.map(s => {
+      if (s.length > maxChars || byteLength(s) > maxBytes) {
+        // 强制截断
+        let result = '';
+        for (const char of s) {
+          const test = result + char;
+          if (test.length > maxChars || byteLength(test) > maxBytes) {
+            break;
+          }
+          result = test;
+        }
+        return result;
+      }
+      return s;
+    }).filter(s => s.length > 0);
+  }
 
+  /**
+   * 合成单段语音（内部方法）
+   * @private
+   */
+  async _synthesizeSegment(text, options = {}) {
     return new Promise((resolve, reject) => {
       const voice = options.voice || this.defaultVoice;
-      const speed = options.speed || 1.0;
+      const speed = options.speed || this.defaultSpeed;
       
       console.log(`[VolcanoTTSService] Using voice: ${voice}, speed: ${speed}`);
       
@@ -188,6 +260,73 @@ export class VolcanoTTSService {
         }
       }, 30000);
     });
+  }
+
+  /**
+   * 合成语音（支持长文本自动分段）
+   * @param {string} text - 要合成的文本
+   * @param {Object} options - 选项 { voice, speed }
+   * @returns {Promise<{audioData: Buffer, format: string, duration: number}>}
+   */
+  async synthesize(text, options = {}) {
+    if (!text || !text.trim()) {
+      throw new Error('Text is required for TTS synthesis');
+    }
+    
+    const trimmedText = text.trim();
+    
+    // 使用默认配置
+    const voice = options.voice || this.defaultVoice;
+    const speed = options.speed || this.defaultSpeed;
+    
+    console.log(`[VolcanoTTSService] synthesize() called: ${trimmedText.length} chars, voice: ${voice}, speed: ${speed}`);
+    
+    if (!this.appId || !this.token) {
+      throw new Error('Volcano TTS not configured - check VOLCANO_APP_ID and VOLCANO_ACCESS_TOKEN env vars');
+    }
+    
+    // 分段处理
+    const segments = this.splitTextForTTS(trimmedText);
+    console.log(`[VolcanoTTSService] Text split into ${segments.length} segments`);
+    
+    if (segments.length === 0) {
+      throw new Error('No valid text segments for TTS');
+    }
+    
+    // 单段直接合成
+    if (segments.length === 1) {
+      return this._synthesizeSegment(segments[0], { voice, speed });
+    }
+    
+    // 多段顺序合成并合并
+    const audioBuffers = [];
+    let totalDuration = 0;
+    
+    for (let i = 0; i < segments.length; i++) {
+      console.log(`[VolcanoTTSService] Synthesizing segment ${i + 1}/${segments.length}: "${segments[i].substring(0, 30)}..."`);
+      try {
+        const result = await this._synthesizeSegment(segments[i], { voice, speed });
+        audioBuffers.push(result.audioData);
+        totalDuration += result.duration;
+      } catch (err) {
+        console.error(`[VolcanoTTSService] Segment ${i + 1} failed:`, err.message);
+        // 继续合成剩余段落，不中断
+      }
+    }
+    
+    if (audioBuffers.length === 0) {
+      throw new Error('All TTS segments failed');
+    }
+    
+    // 合并音频
+    const mergedAudio = Buffer.concat(audioBuffers);
+    console.log(`[VolcanoTTSService] Merged ${audioBuffers.length} segments, total: ${mergedAudio.length} bytes`);
+    
+    return {
+      audioData: mergedAudio,
+      format: 'mp3',
+      duration: totalDuration
+    };
   }
 
   /**
