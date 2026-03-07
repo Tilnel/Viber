@@ -466,6 +466,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     processingVoiceTimeRef.current = now;
     
     if (!currentSession) {
+      console.error('[ChatPanel] No current session! Cannot process voice transcript.');
+      console.error('[ChatPanel] Current session state:', { currentSession, sessions: sessions?.length });
       toast.info('请先创建一个会话');
       setShowSessionMenu(true);
       return;
