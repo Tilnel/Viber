@@ -274,7 +274,12 @@ export class ViberSocket {
   /**
    * 开始录音
    */
-  startVoice(sessionId: string, config?: { sampleRate?: number; language?: string }): void {
+  startVoice(sessionId: string, config?: { 
+    sampleRate?: number; 
+    language?: string;
+    ttsVoice?: string;
+    ttsSpeed?: number;
+  }): void {
     this.send(ViberMessageType.VOICE_START, { sessionId, config });
   }
 

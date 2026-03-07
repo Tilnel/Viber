@@ -12,6 +12,7 @@
 import { SimpleRecorder } from './SimpleRecorder';
 import { getViberSocket, ViberMessageType, resetViberSocket } from '../viberSocket';
 import { getSpeakerController } from './SpeakerController';
+import { loadVoiceConfig } from '../voiceConfig';
 
 // 获取认证 token
 function getAuthToken(): string {
@@ -128,9 +129,14 @@ export class NewVoiceService {
       throw new Error('请先选择一个会话才能开始语音对话');
     }
     
+    // 获取用户 TTS 配置
+    const voiceConfig = loadVoiceConfig();
+    
     this.socket.startVoice(sessionId, {
       sampleRate: 16000,
-      language: 'zh-CN'
+      language: 'zh-CN',
+      ttsVoice: voiceConfig.ttsVoice,
+      ttsSpeed: voiceConfig.ttsSpeed
     });
     
     this.setState('streaming');

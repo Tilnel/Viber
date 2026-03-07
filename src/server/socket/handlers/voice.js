@@ -63,7 +63,7 @@ export function createVoiceHandlers(voiceOrchestrator) {
         });
       }
       
-      // 存储流信息
+      // 存储流信息（包含 TTS 配置）
       const streamInfo = {
         id: streamId,
         sessionId,
@@ -71,6 +71,10 @@ export function createVoiceHandlers(voiceOrchestrator) {
         userId: socket.userId,
         asrSession,
         config,
+        ttsConfig: {
+          voice: config?.ttsVoice || 'BV001_streaming',
+          speed: config?.ttsSpeed || 1.0
+        },
         startTime: Date.now(),
         audioBuffer: [],
         transcript: '',
@@ -90,7 +94,8 @@ export function createVoiceHandlers(voiceOrchestrator) {
         voiceOrchestrator.createDialog(streamId, {
           sessionId,
           socketId: socket.id,
-          userId: socket.userId
+          userId: socket.userId,
+          ttsConfig: streamInfo.ttsConfig
         });
       }
       

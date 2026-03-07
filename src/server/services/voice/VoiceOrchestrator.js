@@ -16,6 +16,7 @@ export class VoiceDialogContext {
     this.sessionId = data.sessionId;
     this.socketId = data.socketId;
     this.userId = data.userId;
+    this.ttsConfig = data.ttsConfig || { voice: 'BV001_streaming', speed: 1.0 };
     this.messages = []; // 对话历史
     this.currentStream = null; // 当前音频流
     this.llmRequestId = null; // LLM 请求 ID
@@ -293,11 +294,13 @@ export class VoiceOrchestrator {
       return;
     }
 
-    console.log(`[VoiceOrchestrator] TTS START for ${streamId}: "${text.substring(0, 50)}..." (${text.length} chars)`);
+    // 获取用户的 TTS 配置
+    const { voice, speed } = dialog.ttsConfig;
+    console.log(`[VoiceOrchestrator] TTS START for ${streamId}: "${text.substring(0, 50)}..." (${text.length} chars), voice: ${voice}, speed: ${speed}`);
     
     try {
       console.log(`[VoiceOrchestrator] Calling TTS service.synthesize()...`);
-      const result = await this.ttsService.synthesize(text);
+      const result = await this.ttsService.synthesize(text, { voice, speed });
       console.log(`[VoiceOrchestrator] TTS synthesize() returned: audioData=${result?.audioData?.length || 0} bytes, format=${result?.format}, duration=${result?.duration}`);
       
       if (!result || !result.audioData || result.audioData.length === 0) {
