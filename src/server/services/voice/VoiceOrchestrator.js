@@ -287,24 +287,32 @@ export class VoiceOrchestrator {
 
   /**
    * 提取适合 TTS 的文本
+   * 限制最大长度，避免一次性合成过长音频
    */
   extractTTSText(buffer) {
+    const MAX_TTS_LENGTH = 100; // 最大 100 字符，保证快速响应
+    
     // 找到第一个句子结束位置（使用非贪婪匹配找到第一个标点）
     const match = buffer.match(/^.+?[。！？.!?\n]/);
     if (match) {
+      // 如果匹配的句子太长，截断
+      if (match[0].length > MAX_TTS_LENGTH) {
+        return match[0].substring(0, MAX_TTS_LENGTH);
+      }
       return match[0];
     }
     
-    // 如果没有标点，返回全部（如果超过 50 字符）
+    // 如果没有标点，但有足够字符，返回一段（限制长度）
     if (buffer.length >= 50) {
-      return buffer;
+      return buffer.substring(0, Math.min(buffer.length, MAX_TTS_LENGTH));
     }
     
     return '';
   }
 
   /**
-   * 合成并播放 TTS
+   * 合成并播放 TTS（支持长文本分段）
+   * 长文本会分成多段，每段合成后立即发送给前端
    */
   async synthesizeAndPlay(streamId, text) {
     const dialog = this.dialogs.get(streamId);
@@ -320,12 +328,56 @@ export class VoiceOrchestrator {
 
     // 获取用户的 TTS 配置
     const { voice, speed } = dialog.ttsConfig;
-    console.log(`[VoiceOrchestrator] TTS START for ${streamId}: "${text.substring(0, 50)}..." (${text.length} chars), voice: ${voice}, speed: ${speed}`);
+    const trimmedText = text.trim();
+    
+    // 如果文本较长，先分段
+    if (trimmedText.length > 100) {
+      console.log(`[VoiceOrchestrator] TTS long text (${trimmedText.length} chars), splitting...`);
+      const segments = this.splitTextForTTSSimple(trimmedText);
+      for (const segment of segments) {
+        await this.synthesizeAndSend(streamId, dialog, segment, voice, speed);
+      }
+      return;
+    }
+    
+    // 短文本直接合成
+    await this.synthesizeAndSend(streamId, dialog, trimmedText, voice, speed);
+  }
+
+  /**
+   * 简单的文本分段（用于兜底逻辑）
+   */
+  splitTextForTTSSimple(text) {
+    const MAX_LEN = 100;
+    const segments = [];
+    
+    // 按句子分割
+    const sentences = text.split(/([。！？.!?；;\n]+)/);
+    let current = '';
+    
+    for (const part of sentences) {
+      if (!part) continue;
+      
+      if ((current + part).length <= MAX_LEN) {
+        current += part;
+      } else {
+        if (current) segments.push(current);
+        current = part.length > MAX_LEN ? part.substring(0, MAX_LEN) : part;
+      }
+    }
+    
+    if (current) segments.push(current);
+    return segments;
+  }
+
+  /**
+   * 合成单段并发送
+   */
+  async synthesizeAndSend(streamId, dialog, text, voice, speed) {
+    console.log(`[VoiceOrchestrator] TTS synthesize: "${text.substring(0, 50)}..." (${text.length} chars)`);
     
     try {
-      console.log(`[VoiceOrchestrator] Calling TTS service.synthesize()...`);
-      const result = await this.ttsService.synthesize(text, { voice, speed });
-      console.log(`[VoiceOrchestrator] TTS synthesize() returned: audioData=${result?.audioData?.length || 0} bytes, format=${result?.format}, duration=${result?.duration}`);
+      const result = await this.ttsService._synthesizeSegment(text, { voice, speed });
       
       if (!result || !result.audioData || result.audioData.length === 0) {
         console.error(`[VoiceOrchestrator] TTS returned empty audio!`);
@@ -334,7 +386,6 @@ export class VoiceOrchestrator {
       
       // 转换为 base64
       const audioBase64 = result.audioData.toString('base64');
-      console.log(`[VoiceOrchestrator] TTS audio base64 length: ${audioBase64.length}`);
       
       // 发送音频给前端播放
       const message = {
@@ -349,12 +400,10 @@ export class VoiceOrchestrator {
         }
       };
       
-      console.log(`[VoiceOrchestrator] Sending speaker:play to socket ${dialog.socketId}, taskId=${message.data.taskId}`);
       this.socketManager.sendToSocket(dialog.socketId, message);
-      console.log(`[VoiceOrchestrator] speaker:play sent successfully`);
       
     } catch (error) {
-      console.error(`[VoiceOrchestrator] TTS error in synthesizeAndPlay:`, error.message, error.stack);
+      console.error(`[VoiceOrchestrator] TTS error in synthesizeAndSend:`, error.message);
     }
   }
 
