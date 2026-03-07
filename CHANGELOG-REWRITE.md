@@ -415,15 +415,23 @@ WS_MESSAGE_SIZE_LIMIT=10485760  # 10MB，用于音频
 
 ### 2024-03-07
 - [x] 创建 CHANGELOG-REWRITE.md
-- [x] Phase 1 开始：标准化 Volcano ASR/TTS 接口
-- [x] 创建 `src/server/services/asr/` 模块
-  - [x] `types.js` - ASR 通用接口定义
-  - [x] `VolcanoASRService.js` - 火山引擎实现
-- [x] 创建 `src/server/services/tts/` 模块
-  - [x] `types.js` - TTS 通用接口定义
-  - [x] `VolcanoTTSService.js` - 火山引擎实现
-- [ ] 集成测试：验证新接口可用
-- [ ] 编写接口文档注释
+- [x] Phase 1 完成：标准化 Volcano ASR/TTS 接口
+  - [x] `src/server/services/asr/` 模块
+  - [x] `src/server/services/tts/` 模块
+- [x] Phase 2 完成：提取独立组件
+  - [x] `src/server/services/detector/` - Speech Detector API
+    - [x] `types.js` - 接口定义（AudioContext, DetectionResult）
+    - [x] `VolumeBasedSpeechDetector.js` - 音量检测实现
+    - [x] `test.js` - 单元测试
+  - [x] `src/server/services/processor/` - Thinking Processor
+    - [x] `types.js` - 接口定义（RuleBasedProcessor）
+    - [x] `KimiThinkingProcessor.js` - Kimi Fast 实现
+    - [x] `test.js` - 单元测试
+
+### 待办
+- [ ] Phase 3: 后端服务重构（Listener, Speaker, LLM Service）
+- [ ] Phase 4: 前端部件重构（Recorder, Speaker）
+- [ ] Phase 5: 通信层统一（WebSocket 协议规范）
 
 ---
 

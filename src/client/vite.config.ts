@@ -41,13 +41,14 @@ export default defineConfig(({ mode }) => {
       },
       allowedHosts
     },
-  build: {
-    outDir: '../../dist',
-    emptyOutDir: true,
-    sourcemap: true
-  },
-  // 配置 Monaco Editor 的 worker
-  optimizeDeps: {
-    include: ['monaco-editor']
+    build: {
+      outDir: '../../dist',
+      emptyOutDir: true,
+      sourcemap: true
+    },
+    // 配置 Monaco Editor 的 worker
+    optimizeDeps: {
+      include: ['monaco-editor']
+    }
   }
 });
