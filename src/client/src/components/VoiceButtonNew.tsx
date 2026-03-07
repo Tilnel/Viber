@@ -28,7 +28,6 @@ export default function VoiceButtonNew({
     
     serviceRef.current = getNewVoiceService({
       onStateChange: (state) => {
-        console.log('[VoiceButtonNew] State changed to:', state);
         setIsStreaming(state === 'streaming');
       },
       onVolume: (vol) => {
@@ -36,7 +35,6 @@ export default function VoiceButtonNew({
       },
       onTranscript: (text, isFinal) => {
         if (isFinal) {
-          console.log('[VoiceButtonNew] Final transcript:', text);
           onUserSpeech(text);
         } else {
           onInterimSpeech?.(text);
@@ -50,7 +48,6 @@ export default function VoiceButtonNew({
 
     // 组件卸载时才停止
     return () => {
-      console.log('[VoiceButtonNew] Component unmounting, stopping voice...');
       serviceRef.current?.stop();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -69,7 +66,6 @@ export default function VoiceButtonNew({
   }, []);
 
   const stopStreaming = useCallback(() => {
-    console.log('[VoiceButtonNew] stopStreaming called');
     serviceRef.current?.stop();
     setIsStreaming(false);
     setVolume(0);
@@ -78,8 +74,6 @@ export default function VoiceButtonNew({
   const toggle = useCallback(async () => {
     const currentService = serviceRef.current;
     const isCurrentlyStreaming = currentService?.isStreaming() || false;
-    
-    console.log('[VoiceButtonNew] Toggle clicked, currently streaming:', isCurrentlyStreaming);
     
     if (isCurrentlyStreaming) {
       stopStreaming();
@@ -90,10 +84,6 @@ export default function VoiceButtonNew({
       }
     }
   }, [startStreaming, stopStreaming]);
-
-  // 调试：检查实际类名
-  const buttonClass = `voice-conversation-btn ${isStreaming ? 'active' : ''}`;
-  console.log('[VoiceButtonNew] Button class:', buttonClass, 'isStreaming:', isStreaming);
 
   return (
     <div className="voice-conversation-wrapper">

@@ -99,21 +99,6 @@ export class NewVoiceService {
         // 持续推送音频到后端
         if (this.streamId) {
           this.socket.sendAudio(this.streamId, frame, this.audioSeq++);
-          frameCount++;
-          
-          // 每秒打印一次发送统计
-          const now = Date.now();
-          if (now - lastLogTime > 1000) {
-            console.log(`[NewVoiceService] Sent ${frameCount} frames in last second, total seq: ${this.audioSeq}`);
-            frameCount = 0;
-            lastLogTime = now;
-          }
-        } else {
-          // streamId 还没收到，丢弃音频
-          if (frameCount === 0) {
-            console.log('[NewVoiceService] Waiting for streamId, dropping audio frames...');
-          }
-          frameCount++;
         }
       },
       onVolume: (volume) => {
@@ -141,7 +126,7 @@ export class NewVoiceService {
     });
     
     this.setState('streaming');
-    console.log('[NewVoiceService] Started streaming audio to backend');
+    // 开始向后端发送音频
     return true;
   }
 
@@ -150,9 +135,6 @@ export class NewVoiceService {
    */
   stop(): void {
     if (this.state === 'idle') return;
-    
-    console.log('[NewVoiceService] Stopping... (called from:)');
-    console.trace('[NewVoiceService] Stop stack trace');
     
     // 停止录音
     this.recorder?.stop();
@@ -199,7 +181,6 @@ export class NewVoiceService {
   private setupSocketHandlers(): void {
     // 录音已开始
     this.socket.on(ViberMessageType.VOICE_STARTED, (data) => {
-      console.log('[NewVoiceService] Voice started:', data.streamId);
       this.streamId = data.streamId;
     });
     
@@ -220,15 +201,9 @@ export class NewVoiceService {
     
     // 错误
     this.socket.on(ViberMessageType.ERROR, (data) => {
-      console.error('[NewVoiceService] Received error from backend:', JSON.stringify(data, null, 2));
-      console.error('[NewVoiceService] Current streamId:', this.streamId, 'Error context streamId:', data?.context?.streamId);
-      
-      // 只处理当前流的错误，或者是全局错误
       const isRelevant = !data?.context?.streamId || data.context.streamId === this.streamId;
-      console.error('[NewVoiceService] Is relevant error:', isRelevant);
-      
       if (isRelevant) {
-        const errorMsg = data?.message || data?.error?.message || data?.error?.code || JSON.stringify(data);
+        const errorMsg = data?.message || data?.error?.message || data?.error?.code || 'Unknown error';
         this.options.onError?.(errorMsg);
       }
     });

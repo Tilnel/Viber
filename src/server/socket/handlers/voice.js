@@ -147,11 +147,6 @@ export function createVoiceHandlers() {
     'voice:audio': async (socket, data) => {
       const { streamId, seq, audio, timestamp } = data;
       
-      // 每100帧打印一次日志
-      if (seq % 100 === 0) {
-        console.log(`[VoiceHandler] Received audio frame seq=${seq} from ${socket.id}`);
-      }
-      
       const stream = activeStreams.get(streamId);
       if (!stream) {
         console.warn(`[VoiceHandler] Stream not found: ${streamId}`);
