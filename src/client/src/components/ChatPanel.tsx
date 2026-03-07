@@ -466,22 +466,18 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     processingVoiceTimeRef.current = now;
     
     if (!currentSession) {
-      console.error('[ChatPanel] No current session! Cannot process voice transcript.');
-      console.error('[ChatPanel] Current session state:', { currentSession, sessions: sessions?.length });
       toast.info('请先创建一个会话');
       setShowSessionMenu(true);
       return;
     }
     
-    console.log('[ChatPanel] Final voice transcript, filling to input:', transcript);
+    console.log('[ChatPanel] Voice transcript, auto-sending:', transcript);
     
-    // 语音结果回填到输入框，让用户确认后手动发送
-    setInputText(prev => {
-      if (prev && prev.trim()) {
-        return prev + '\n' + transcript;  // 追加到现有内容
-      }
-      return transcript;
-    });
+    // 1. 填入输入框（用户反馈：看到识别的内容）
+    setInputText(transcript);
+    
+    // 2. 自动发送给 LLM 处理（语音对话模式）
+    sendMessageWithVoice(currentSession.id, transcript, false);
   };
 
   // AI 回复文本收集（用于语音对话TTS）
