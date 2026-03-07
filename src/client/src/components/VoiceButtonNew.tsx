@@ -1,7 +1,7 @@
 // 新版语音按钮 - 使用统一 WebSocket，前端纯采集，后端处理 VAD
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { NewVoiceService, getNewVoiceService } from '../services/voice/NewVoiceService';
+import { NewVoiceService, getNewVoiceService, resetNewVoiceService } from '../services/voice/NewVoiceService';
 import './VoiceConversationButton.css';
 
 interface VoiceButtonNewProps {
@@ -23,11 +23,8 @@ export default function VoiceButtonNew({
 
   // 初始化服务 - 只在组件挂载时执行一次
   useEffect(() => {
-    // 使用 ref 存储回调，避免重新创建服务
-    const callbacksRef = {
-      onUserSpeech,
-      onInterimSpeech
-    };
+    // 重置服务，确保使用新的回调
+    resetNewVoiceService();
     
     serviceRef.current = getNewVoiceService({
       onStateChange: (state) => {
@@ -40,9 +37,9 @@ export default function VoiceButtonNew({
       onTranscript: (text, isFinal) => {
         if (isFinal) {
           console.log('[VoiceButtonNew] Final transcript:', text);
-          callbacksRef.onUserSpeech(text);
+          onUserSpeech(text);
         } else {
-          callbacksRef.onInterimSpeech?.(text);
+          onInterimSpeech?.(text);
         }
       },
       onError: (error) => {
