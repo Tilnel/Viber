@@ -114,12 +114,13 @@ export class VoiceOrchestrator {
       return;
     }
     
-    // 通知前端 LLM 开始处理
+    // 通知前端 LLM 开始处理（携带用户消息内容用于显示）
     this.socketManager.sendToSocket(dialog.socketId, {
       type: 'chat:thinking',
       data: {
         streamId,
-        sessionId: dialog.sessionId
+        sessionId: dialog.sessionId,
+        text: userContent  // 用户语音识别的文本
       }
     });
     

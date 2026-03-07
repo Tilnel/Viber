@@ -142,7 +142,19 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       setIsVoiceFlowActive(true);
       voiceAccumulatedTextRef.current = '';
       
-      // 开始流式显示
+      // 添加用户消息到界面（语音输入的用户消息）
+      if (currentSession && data.text) {
+        const userMessage: ChatMessage = {
+          id: Date.now(),
+          sessionId: currentSession.id,
+          role: 'user',
+          content: data.text,
+          createdAt: new Date().toISOString()
+        };
+        setMessages(prev => [...prev, userMessage]);
+      }
+      
+      // 开始流式显示助手回复
       setIsStreaming(true);
       streamingBlocksRef.current = [];
       setStreamingBlocks([]);
