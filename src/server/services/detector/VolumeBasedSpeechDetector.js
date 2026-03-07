@@ -36,6 +36,7 @@ export class VolumeBasedSpeechDetector extends SpeechDetector {
       // 自适应配置
       adaptiveThreshold: false,     // 是否启用自适应阈值
       noiseAdaptationRate: 0.1,     // 噪音适应速率
+      noiseFloor: 0.01,             // 初始噪音基底
       
       ...config
     };
@@ -64,33 +65,45 @@ export class VolumeBasedSpeechDetector extends SpeechDetector {
     
     // 音量判断
     const isLoud = currentVolume > this._effectiveThreshold;
+    const now = Date.now();
     
     // 状态机处理
     if (!this._isSpeaking) {
       // 当前未在语音中
       if (isLoud) {
-        // 检测到可能的声音开始
-        if (context.speechDuration >= this.config.minSpeechDuration) {
+        // 检测到可能的声音
+        if (this._speechStartTime === null) {
+          // 首次检测到声音
+          this._speechStartTime = now;
+          return DetectionResult.no('potential_speech', 0.3);
+        }
+        
+        // 检查持续时间
+        const potentialSpeechDuration = now - this._speechStartTime;
+        if (potentialSpeechDuration >= this.config.minSpeechDuration) {
           // 确认是语音（持续时间足够）
           this._isSpeaking = true;
-          this._speechStartTime = Date.now() - context.speechDuration;
-          
           return DetectionResult.yes('speech_start', this._calculateConfidence(currentVolume));
         }
+        
         // 声音还不够长，继续观察
-        return DetectionResult.no('potential_speech', 0.5);
+        return DetectionResult.no('potential_speech', 0.5 + potentialSpeechDuration / this.config.minSpeechDuration * 0.3);
+      } else {
+        // 静音，重置潜在语音开始时间
+        if (this._speechStartTime !== null) {
+          this._speechStartTime = null;
+        }
+        return DetectionResult.no('silence', 1.0);
       }
-      
-      // 静音状态
-      return DetectionResult.no('silence', 1.0);
       
     } else {
       // 当前在语音中
-      const speechDuration = Date.now() - this._speechStartTime;
+      const speechDuration = now - this._speechStartTime;
       
       // 检查是否超时
       if (speechDuration >= this.config.maxSpeechDuration) {
         this._isSpeaking = false;
+        this._speechStartTime = null;
         return DetectionResult.no('max_duration_reached', 1.0, { 
           speechDuration,
           reason: 'timeout' 
@@ -100,6 +113,7 @@ export class VolumeBasedSpeechDetector extends SpeechDetector {
       // 检查是否静音太久
       if (!isLoud && context.silenceDuration >= this.config.minSilenceDuration) {
         this._isSpeaking = false;
+        this._speechStartTime = null;
         return DetectionResult.no('silence_timeout', 1.0, {
           speechDuration,
           silenceDuration: context.silenceDuration,
@@ -107,13 +121,14 @@ export class VolumeBasedSpeechDetector extends SpeechDetector {
         });
       }
       
-      // 仍在语音中
-      if (isLoud) {
-        return DetectionResult.yes('speaking', this._calculateConfidence(currentVolume));
-      } else {
-        // 短暂静音（可能是停顿）
-        return DetectionResult.yes('speaking_pause', 0.8);
+      // 仍在语音中（音量够大，或短暂静音）
+      if (isLoud || context.silenceDuration < this.config.minSilenceDuration) {
+        return DetectionResult.yes(isLoud ? 'speaking' : 'speaking_pause', 
+          isLoud ? this._calculateConfidence(currentVolume) : 0.8);
       }
+      
+      // 其他情况（不应该到这里）
+      return DetectionResult.no('unknown', 0);
     }
   }
   
