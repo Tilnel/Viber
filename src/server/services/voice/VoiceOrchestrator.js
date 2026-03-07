@@ -107,7 +107,8 @@ export class VoiceOrchestrator {
     
     const dialog = this.dialogs.get(streamId);
     dialog.state = 'processing';
-    dialog.context = context; // 保存上下文（当前文件等）
+    dialog.context = context;
+    dialog.isTextInput = true; // 标记为文字输入
     
     // 走统一处理流程
     await this.processConversation(streamId, dialog, userContent);
@@ -159,10 +160,8 @@ export class VoiceOrchestrator {
         {
           sessionId: dialog.sessionId,
           content: userContent,
-          context: {
-            // 语音对话没有当前文件上下文，可以后续扩展
-          },
-          skipUserMessageSave: false // 保存 ASR 结果作为用户消息
+          context: dialog.context || {},
+          skipUserMessageSave: dialog.isTextInput || false // 文字输入跳过保存（前端已保存）
         },
         {
           onTextDelta: (text) => {
