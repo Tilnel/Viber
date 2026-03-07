@@ -226,14 +226,14 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     
     // 监听 TTS 音频播放
     const unsubscribeSpeakerPlay = socket.on(ViberMessageType.SPEAKER_PLAY, (data) => {
-      const { audio, text } = data;
-      console.log('[ChatPanel] TTS audio received, length:', audio?.length);
+      const { audioData, text } = data;
+      console.log('[ChatPanel] TTS audio received, length:', audioData?.length);
       
-      if (audio && !interruptedRef.current) {
+      if (audioData && !interruptedRef.current) {
         // Base64 解码并播放
         try {
-          const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
-          const blob = new Blob([audioData], { type: 'audio/mp3' });
+          const audioBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
+          const blob = new Blob([audioBytes], { type: 'audio/mp3' });
           const url = URL.createObjectURL(blob);
           const audioEl = new Audio(url);
           audioEl.play().catch(e => console.error('[ChatPanel] TTS play error:', e));

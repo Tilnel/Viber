@@ -156,6 +156,8 @@ export class VoiceOrchestrator {
               const ttsText = this.extractTTSText(ttsBuffer);
               ttsBuffer = ttsBuffer.slice(ttsText.length);
               
+              console.log(`[VoiceOrchestrator] Triggering TTS for: "${ttsText.substring(0, 50)}..."`);
+              
               // 异步合成 TTS
               this.synthesizeAndPlay(streamId, ttsText);
             }
@@ -185,10 +187,11 @@ export class VoiceOrchestrator {
           },
           
           onComplete: async (result) => {
-            console.log(`[VoiceOrchestrator] LLM done for ${streamId}`);
+            console.log(`[VoiceOrchestrator] LLM done for ${streamId}, full response length: ${fullResponse.length}`);
             
             // 处理剩余 TTS 缓冲
             if (ttsBuffer.trim()) {
+              console.log(`[VoiceOrchestrator] Processing remaining TTS buffer: ${ttsBuffer.length} chars`);
               await this.synthesizeAndPlay(streamId, ttsBuffer);
             }
             
@@ -272,10 +275,12 @@ export class VoiceOrchestrator {
     const dialog = this.dialogs.get(streamId);
     if (!dialog) return;
 
-    console.log(`[VoiceOrchestrator] TTS for ${streamId}: "${text.substring(0, 30)}..."`);
+    console.log(`[VoiceOrchestrator] TTS for ${streamId}: "${text.substring(0, 50)}..."`);
     
     try {
+      console.log(`[VoiceOrchestrator] Calling TTS service...`);
       const result = await this.ttsService.synthesize(text);
+      console.log(`[VoiceOrchestrator] TTS result: ${result.audioData?.length || 0} bytes, format: ${result.format}`);
       
       // 发送音频给前端播放
       this.socketManager.sendToSocket(dialog.socketId, {
