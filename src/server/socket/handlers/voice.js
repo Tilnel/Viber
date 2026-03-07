@@ -43,11 +43,24 @@ export function createVoiceHandlers() {
       
       console.log(`[VoiceHandler] Start stream ${streamId} for session ${sessionId}`);
       
-      // 创建 ASR 会话
-      const asrSession = asrService.createSession({
-        sampleRate: config?.sampleRate || 16000,
-        language: config?.language || 'zh-CN'
-      });
+      let asrSession;
+      try {
+        // 创建 ASR 会话 (注意：createSession 是 async 的，会连接火山引擎)
+        asrSession = await asrService.createSession(streamId, {
+          sampleRate: config?.sampleRate || 16000,
+          language: config?.language || 'zh-CN'
+        });
+      } catch (error) {
+        console.error(`[VoiceHandler] Failed to create ASR session:`, error);
+        return socket.emit('message', {
+          type: 'error',
+          data: {
+            code: 'ASR_CONNECT_FAILED',
+            message: '无法连接语音识别服务',
+            context: { streamId, error: error.message }
+          }
+        });
+      }
       
       // 存储流信息
       const streamInfo = {
@@ -136,12 +149,11 @@ export function createVoiceHandlers() {
       }
       
       try {
-        // Base64 → Buffer → Int16Array
-        const buffer = Buffer.from(audio, 'base64');
-        const int16Data = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.length / 2);
+        // Base64 → Buffer (PCM Int16 data)
+        const pcmBuffer = Buffer.from(audio, 'base64');
         
         // 计算音量（用于前端可视化）
-        const volume = calculateVolume(int16Data);
+        const volume = calculateVolume(pcmBuffer);
         
         // 发送音量反馈
         socket.emit('message', {
@@ -149,11 +161,20 @@ export function createVoiceHandlers() {
           data: { streamId, volume }
         });
         
-        // 发送到 ASR
-        stream.asrSession.sendAudio(Buffer.from(int16Data.buffer));
+        // 发送到 ASR (必须 await，否则未处理的异常会导致连接断开)
+        await stream.asrSession.sendAudio(pcmBuffer);
         
       } catch (error) {
-        console.error('[VoiceHandler] Process audio error:', error);
+        console.error('[VoiceHandler] Process audio error:', error.message);
+        // 不要断开连接，只发送错误通知
+        socket.emit('message', {
+          type: 'error',
+          data: {
+            code: 'AUDIO_PROCESS_ERROR',
+            message: error.message,
+            context: { streamId }
+          }
+        });
       }
     },
 
@@ -241,13 +262,16 @@ export function createVoiceHandlers() {
 
 /**
  * 计算音量
+ * @param {Buffer} pcmBuffer - Int16 PCM data
  */
-function calculateVolume(int16Data) {
+function calculateVolume(pcmBuffer) {
   let sum = 0;
-  for (let i = 0; i < int16Data.length; i++) {
-    sum += Math.abs(int16Data[i]);
+  // 读取 Int16 样本
+  for (let i = 0; i < pcmBuffer.length; i += 2) {
+    const sample = pcmBuffer.readInt16LE(i);
+    sum += Math.abs(sample);
   }
-  const avg = sum / int16Data.length;
+  const avg = sum / (pcmBuffer.length / 2);
   // 转换为 0-1 范围
   return Math.min(1, avg / 32767);
 }
