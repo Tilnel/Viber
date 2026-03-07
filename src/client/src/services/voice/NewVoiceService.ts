@@ -194,27 +194,27 @@ export class NewVoiceService {
    */
   private setupSocketHandlers(): void {
     // 录音已开始
-    this.socket.on(ViberMessageType.VOICE_STARTED, (data) => {
+    registerHandler(this.socket.on(ViberMessageType.VOICE_STARTED, (data) => {
       this.streamId = data.streamId;
-    });
+    }));
     
     // 音量更新（后端计算）
-    this.socket.on(ViberMessageType.VOICE_VOLUME, (data) => {
+    registerHandler(this.socket.on(ViberMessageType.VOICE_VOLUME, (data) => {
       this.options.onVolume?.(data.volume);
-    });
+    }));
     
     // ASR 临时结果
-    this.socket.on(ViberMessageType.VOICE_ASR_INTERIM, (data) => {
+    registerHandler(this.socket.on(ViberMessageType.VOICE_ASR_INTERIM, (data) => {
       this.options.onTranscript?.(data.text, false);
-    });
+    }));
     
     // ASR 最终结果
-    this.socket.on(ViberMessageType.VOICE_ASR_FINAL, (data) => {
+    registerHandler(this.socket.on(ViberMessageType.VOICE_ASR_FINAL, (data) => {
       this.options.onTranscript?.(data.text, true);
-    });
+    }));
     
     // TTS 播放指令
-    this.socket.on(ViberMessageType.SPEAKER_PLAY, (data) => {
+    registerHandler(this.socket.on(ViberMessageType.SPEAKER_PLAY, (data) => {
       console.log('[NewVoiceService] Received TTS task:', data.taskId);
       const speaker = getSpeakerController({
         onStateChange: (state) => {
@@ -235,23 +235,23 @@ export class NewVoiceService {
         format: data.format,
         duration: data.duration
       });
-    });
+    }));
     
     // TTS 停止指令
-    this.socket.on(ViberMessageType.SPEAKER_STOP, () => {
+    registerHandler(this.socket.on(ViberMessageType.SPEAKER_STOP, () => {
       console.log('[NewVoiceService] Received stop speaker');
       const speaker = getSpeakerController();
       speaker.stopAll();
-    });
+    }));
     
     // 错误
-    this.socket.on(ViberMessageType.ERROR, (data) => {
+    registerHandler(this.socket.on(ViberMessageType.ERROR, (data) => {
       const isRelevant = !data?.context?.streamId || data.context.streamId === this.streamId;
       if (isRelevant) {
         const errorMsg = data?.message || data?.error?.message || data?.error?.code || 'Unknown error';
         this.options.onError?.(errorMsg);
       }
-    });
+    }));
   }
 
   /**
@@ -279,6 +279,7 @@ export class NewVoiceService {
 
 // 单例
 let globalNewVoiceService: NewVoiceService | null = null;
+let unsubscribeHandlers: (() => void)[] = [];
 
 export function getNewVoiceService(options?: NewVoiceServiceOptions): NewVoiceService {
   if (!globalNewVoiceService) {
@@ -288,8 +289,16 @@ export function getNewVoiceService(options?: NewVoiceServiceOptions): NewVoiceSe
 }
 
 export function resetNewVoiceService(): void {
+  // 清理所有监听器
+  unsubscribeHandlers.forEach(unsub => unsub());
+  unsubscribeHandlers = [];
+  
   globalNewVoiceService?.stop();
   globalNewVoiceService = null;
+}
+
+export function registerHandler(unsubscribe: () => void): void {
+  unsubscribeHandlers.push(unsubscribe);
 }
 
 export default NewVoiceService;

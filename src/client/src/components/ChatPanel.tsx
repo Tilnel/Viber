@@ -69,11 +69,6 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
   // 语音流状态 - 用于后端推送的 LLM 消息
   const [isVoiceFlowActive, setIsVoiceFlowActive] = useState(false);
   const voiceAccumulatedTextRef = useRef('');
-  
-  // TTS 音频队列 - 用于流式顺序播放
-  const audioQueueRef = useRef<string[]>([]);
-  const isPlayingRef = useRef(false);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // 停止生成
   const stopGeneration = useCallback(() => {
@@ -88,20 +83,10 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     // 设置打断标志
     interruptedRef.current = true;
     
-    // 清空音频队列（会在 processQueue 循环中检测到并停止）
-    audioQueueRef.current = [];
-    
-    // 停止当前播放的音频
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current.src = ''; // 释放资源
-      currentAudioRef.current = null;
-    }
-    
-    // 发送停止命令到后端
+    // 发送停止命令到后端（后端会发送 speaker:stop，SpeakerController 处理）
     viberSocketRef.current.stopChat(0);
     
-    console.log('[ChatPanel] TTS stopped and queue cleared');
+    console.log('[ChatPanel] Stop generation requested');
     
     // 保存已生成的内容到消息列表
     if (streamingBlocksRef.current.length > 0) {
@@ -236,67 +221,14 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       setIsVoiceFlowActive(false);
     });
     
-    // 监听 TTS 音频播放 - 使用队列顺序播放
-    const processQueue = async () => {
-      if (isPlayingRef.current) return; // 已经在处理队列
-      
-      isPlayingRef.current = true;
-      
-      while (audioQueueRef.current.length > 0 && !interruptedRef.current) {
-        const audioData = audioQueueRef.current.shift();
-        if (!audioData) continue;
-        
-        try {
-          const audioBytes = Uint8Array.from(atob(audioData), c => c.charCodeAt(0));
-          const blob = new Blob([audioBytes], { type: 'audio/mp3' });
-          const url = URL.createObjectURL(blob);
-          const audioEl = new Audio(url);
-          
-          currentAudioRef.current = audioEl;
-          
-          // 等待音频播放完成
-          await new Promise<void>((resolve) => {
-            audioEl.onended = () => {
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            
-            audioEl.onerror = () => {
-              console.error('[ChatPanel] TTS audio error');
-              URL.revokeObjectURL(url);
-              resolve();
-            };
-            
-            audioEl.play().catch(e => {
-              console.error('[ChatPanel] TTS play error:', e);
-              resolve();
-            });
-          });
-          
-        } catch (e) {
-          console.error('[ChatPanel] TTS decode error:', e);
-        }
-      }
-      
-      currentAudioRef.current = null;
-      isPlayingRef.current = false;
-    };
-    
-    const unsubscribeSpeakerPlay = socket.on(ViberMessageType.SPEAKER_PLAY, (data) => {
-      console.log('[ChatPanel] speaker:play event received:', JSON.stringify(data).substring(0, 100));
-      const { audioData, text } = data || {};
-      
-      if (audioData && !interruptedRef.current) {
-        audioQueueRef.current.push(audioData);
-        processQueue(); // 启动队列处理（如果还没在运行）
-      }
-    });
+    // 注意：TTS 音频播放由 SpeakerController 统一处理
+    // VoiceSocketService 接收 speaker:play 消息，通过 SpeakerController 播放
+    // ChatPanel 不再处理音频播放，避免重复
     
     return () => {
       unsubscribeThinking();
       unsubscribeDelta();
       unsubscribeComplete();
-      unsubscribeSpeakerPlay();
     };
   }, [currentSession]);
 
