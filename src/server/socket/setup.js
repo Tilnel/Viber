@@ -8,6 +8,7 @@
 import { createViberSocketManager } from './viber.js';
 import { createVoiceHandlers } from './handlers/voice.js';
 import { createTerminalHandlers } from './handlers/terminal.js';
+import { VoiceOrchestrator } from '../services/voice/VoiceOrchestrator.js';
 
 /**
  * 设置统一的 Viber WebSocket 服务
@@ -16,8 +17,15 @@ export function setupViberSocket(io) {
   // 创建管理器
   const manager = createViberSocketManager(io);
   
+  // 创建语音协调器（ASR → LLM → TTS）
+  const voiceOrchestrator = new VoiceOrchestrator({
+    llmService: null, // TODO: 初始化 LLMService
+    ttsService: null, // TODO: 初始化 TTSService
+    socketManager: manager
+  });
+  
   // 注册语音处理器
-  const voiceHandlers = createVoiceHandlers();
+  const voiceHandlers = createVoiceHandlers(voiceOrchestrator);
   manager.registerHandlers(voiceHandlers);
   
   // 注册终端处理器
