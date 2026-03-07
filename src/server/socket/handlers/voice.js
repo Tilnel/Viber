@@ -193,8 +193,12 @@ export function createVoiceHandlers() {
       
       stream.isRecording = false;
       
-      // 关闭 ASR 会话
-      stream.asrSession.close();
+      // 关闭 ASR 会话 (使用 terminate 方法)
+      try {
+        await stream.asrSession.terminate();
+      } catch (err) {
+        console.error(`[VoiceHandler] Error terminating ASR session:`, err);
+      }
       
       // 清理
       activeStreams.delete(streamId);

@@ -386,8 +386,8 @@ export class VolcanoASRSession extends ASRSession {
     // Header: version(1) + msgType(1) + serialization(1) + reserved(1)
     const header = Buffer.alloc(4);
     header.writeUInt8(0x11, 0);  // version=1, headerSize=1
-    header.writeUInt8(0x01, 1);  // msgType=1 (full client request), flags=0
-    header.writeUInt8(0x01, 2);  // serialization=1 (JSON), compression=0
+    header.writeUInt8((0x1 << 4) | 0x0, 1);  // msgType=1 (full client request), flags=0
+    header.writeUInt8((0x1 << 4) | 0x0, 2);  // serialization=1 (JSON), compression=0
     header.writeUInt8(0x00, 3);  // reserved
     
     // Length (big-endian)
