@@ -136,13 +136,9 @@ export function createVoiceHandlers() {
       }
       
       try {
-        // Base64 → Int16Array
-        const binary = atob(audio);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        const int16Data = new Int16Array(bytes.buffer);
+        // Base64 → Buffer → Int16Array
+        const buffer = Buffer.from(audio, 'base64');
+        const int16Data = new Int16Array(buffer.buffer, buffer.byteOffset, buffer.length / 2);
         
         // 计算音量（用于前端可视化）
         const volume = calculateVolume(int16Data);

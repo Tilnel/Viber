@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import TTSControl from './TTSControl';
-import VoiceConversationButton from './VoiceConversationButton';
+import VoiceButtonNew from './VoiceButtonNew';
 import './ResizableInputArea.css';
 
 interface ResizableInputAreaProps {
@@ -116,7 +116,7 @@ export default function ResizableInputArea({
         <div className="vertical-actions">
           <div className="action-group top">
             <TTSControl />
-            <VoiceConversationButton 
+            <VoiceButtonNew 
               onUserSpeech={handleVoiceTranscript}
               onInterimSpeech={handleInterimVoiceTranscript}
               onInterrupt={stopGeneration}

@@ -57,3 +57,13 @@ export {
   getViberSocket,
   resetViberSocket
 } from '../viberSocket';
+
+// New Voice Service（新版语音服务 - Phase 5）
+// 前端纯采集 + 后端 VAD 处理
+export {
+  NewVoiceService,
+  type NewVoiceState,
+  type NewVoiceServiceOptions,
+  getNewVoiceService,
+  resetNewVoiceService
+} from './NewVoiceService';
