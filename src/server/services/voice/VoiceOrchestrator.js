@@ -84,15 +84,21 @@ export class VoiceOrchestrator {
     // 2. 更新状态
     dialog.state = 'processing';
 
-    // 3. 直接调用 LLM（不走前端 API）
-    await this.processLLM(streamId, dialog);
+    // 3. 直接调用 LLM（不走前端 API），传入识别文本
+    await this.processLLM(streamId, dialog, text);
   }
 
   /**
    * 调用 LLM 处理 (使用 ChatService/kimi-cli)
    */
-  async processLLM(streamId, dialog) {
-    console.log(`[VoiceOrchestrator] Starting LLM for ${streamId}, session: ${dialog.sessionId}`);
+  async processLLM(streamId, dialog, userContent) {
+    console.log(`[VoiceOrchestrator] Starting LLM for ${streamId}, session: ${dialog.sessionId}, content: "${userContent}"`);
+    
+    if (!userContent) {
+      console.error('[VoiceOrchestrator] No user content provided');
+      dialog.state = 'idle';
+      return;
+    }
     
     if (!this.chatService.isAvailable()) {
       console.error('[VoiceOrchestrator] ChatService (kimi-cli) not available');
@@ -117,10 +123,6 @@ export class VoiceOrchestrator {
       }
     });
     
-    // 获取最后一条用户消息
-    const lastUserMessage = dialog.messages[dialog.messages.length - 1];
-    const userContent = lastUserMessage?.content || '';
-    
     let fullResponse = '';
     let ttsBuffer = '';
     
@@ -132,7 +134,7 @@ export class VoiceOrchestrator {
           context: {
             // 语音对话没有当前文件上下文，可以后续扩展
           },
-          skipUserMessageSave: true // ASR 结果已由前端保存或不需要保存
+          skipUserMessageSave: false // 保存 ASR 结果作为用户消息
         },
         {
           onTextDelta: (text) => {
