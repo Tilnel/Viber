@@ -88,11 +88,10 @@ export default function VoiceButtonNew({
   return (
     <div className="voice-conversation-wrapper">
       <button
-        className={buttonClass}
+        className={`voice-conversation-btn ${isStreaming ? 'active' : ''}`}
         onClick={toggle}
         disabled={disabled}
         title={isStreaming ? '点击停止' : '点击开始语音'}
-        data-streaming={isStreaming}
       >
         <span className={`voice-icon ${isStreaming ? 'active' : ''}`}>
           {isStreaming ? '🎤' : '🎙️'}
