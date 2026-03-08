@@ -23,10 +23,11 @@
 - AI 修改文件的 Diff 展示
 
 ### 4. 语音对话
-- **火山引擎 ASR** - 实时语音识别
-- **多引擎 TTS** - Edge TTS / Piper TTS / 火山 TTS
-- 语音波形可视化
-- 打断与恢复功能
+- **实时双工语音** - "打电话"式体验
+- **火山引擎 ASR/TTS** - 低延迟、高准确率
+- **流式响应** - LLM 边生成边播报
+- **智能打断** - 说话即打断，无需按钮
+- **文本清洗** - Markdown/代码自动转换为口语
 
 ### 5. 版本控制
 - Git 状态显示
@@ -110,25 +111,36 @@ docker-compose logs -f app
 ```
 viber/
 ├── src/
-│   ├── server/          # 后端代码
-│   │   ├── db/          # 数据库连接和迁移
-│   │   ├── middleware/  # Express 中间件
-│   │   ├── routes/      # API 路由
-│   │   ├── services/    # 业务逻辑
-│   │   └── utils/       # 工具函数
-│   ├── client/          # 前端代码
-│   │   ├── src/
-│   │   │   ├── components/  # React 组件
-│   │   │   ├── pages/       # 页面组件
-│   │   │   ├── stores/      # Zustand 状态管理
-│   │   │   ├── services/    # API 服务
-│   │   │   └── hooks/       # 自定义 Hooks
-│   │   └── package.json
-│   └── shared/          # 共享类型定义
-├── dist/                # 构建输出
-├── docker-compose.yml
-├── Dockerfile
-└── nginx.conf
+│   ├── server/                 # 后端代码
+│   │   ├── db/                 # PostgreSQL 数据库
+│   │   ├── socket/             # WebSocket 服务 (/viber)
+│   │   │   ├── viber.js        # ViberSocketManager
+│   │   │   └── handlers/       # 消息处理器
+│   │   ├── services/           # 业务逻辑
+│   │   │   ├── voice/          # VoiceOrchestrator (ASR→LLM→TTS)
+│   │   │   ├── chat/           # ChatService (kimi-cli)
+│   │   │   ├── asr/            # ASR 服务 (火山引擎)
+│   │   │   └── tts/            # TTS 服务 (火山引擎)
+│   │   └── routes/             # REST API
+│   │
+│   ├── client/                 # 前端代码 (React + Vite)
+│   │   └── src/
+│   │       ├── components/     # React 组件
+│   │       ├── services/       # 业务服务
+│   │       │   ├── voice/      # 语音服务
+│   │       │   │   ├── NewVoiceService.ts    # 主语音服务
+│   │       │   │   ├── SpeakerController.ts  # 音频播放
+│   │       │   │   └── SimpleRecorder.ts     # 录音器
+│   │       │   └── viberSocket.ts            # 统一 WebSocket
+│   │       └── stores/         # Zustand 状态管理
+│   │
+│   └── shared/                 # 共享类型
+│
+├── docs/                       # 文档
+│   ├── websocket-protocol.md   # WebSocket 协议规范
+│   └── VOICE_INTEGRATION.md    # 语音集成指南
+│
+└── docker-compose.yml          # Docker 部署配置
 ```
 
 ## 🔧 配置
@@ -168,13 +180,22 @@ VOLCANO_CLUSTER=volcengine_streaming_common
 
 ## 🎤 语音功能说明
 
-viber 采用先进的语音交互方案：
+viber 采用服务端语音处理架构，实现真正的实时双工对话：
 
-1. **STT（语音转文字）**: 火山引擎流式语音识别
-2. **AI 处理**: Kimi CLI 处理文本
-3. **TTS（文字转语音）**: 多引擎支持（Edge TTS / Piper TTS / 火山 TTS）
+```
+用户语音 → 火山引擎 ASR → Kimi CLI → 文本清洗 → 火山引擎 TTS → 播放
+                ↓              ↓              ↓
+           实时字幕      Thinking播报    流式响应
+```
 
-语音识别结果实时显示在输入框，用户可编辑后发送。
+### 特性
+- **即说即播**: 无需等待完整响应，LLM 边生成边语音播报
+- **智能打断**: 说话自动打断 AI，无需点击按钮
+- **文本清洗**: 自动将 Markdown、代码块转换为适合朗读的口语
+- **多音色支持**: 可在设置中选择不同的发音人
+
+### 使用
+点击输入框右侧的麦克风按钮开始语音对话。
 
 ## 🔒 安全性
 
