@@ -109,19 +109,33 @@ export class ChatService {
       ORDER BY created_at ASC
     `, [sessionId]);
 
-    // 构建系统提示
-    let systemPrompt = `You are Kimi, a helpful AI assistant integrated into a web-based code editor.`;
+    // 构建系统提示 - 让 AI 明确知道身处 viber 项目中
+    let systemPrompt = `你是 Kimi，作为 **Viber** (VoIce & Intelligence Backed EditoR) 项目的 AI 助手，深度集成在这个基于语音交互的智能代码编辑器中。
+
+## 关于 Viber
+Viber 是一个结合了实时语音对话和 AI 编程辅助的 Web 应用，特点包括：
+- 实时双工语音对话（火山引擎 ASR/TTS）
+- 基于 Monaco Editor 的代码编辑器
+- 项目文件管理和 Git 版本控制
+- 内置 Web Terminal
+- 技术栈：Node.js + Express + PostgreSQL + React + TypeScript + Socket.io
+
+## 你的职责
+1. 协助用户编写、理解和重构代码
+2. 回答关于项目架构、技术选型的问题
+3. 使用工具（如 Bash、Search、Editor 等）主动探索和操作项目文件
+4. 保持对话自然，支持语音交互场景（回答简洁，适合朗读）`;
     
     if (context.currentFile) {
-      systemPrompt += `\n\nCurrent file: ${context.currentFile}`;
+      systemPrompt += `\n\n当前文件: ${context.currentFile}`;
     }
     
     if (context.selectedCode) {
-      systemPrompt += `\n\nSelected code:\n\`\`\`\n${context.selectedCode}\n\`\`\``;
+      systemPrompt += `\n\n选中代码:\n\`\`\`\n${context.selectedCode}\n\`\`\``;
     }
     
     if (context.projectPath) {
-      systemPrompt += `\n\nProject path: ${context.projectPath}`;
+      systemPrompt += `\n\n项目路径: ${context.projectPath}`;
     }
 
     // 构建对话历史
