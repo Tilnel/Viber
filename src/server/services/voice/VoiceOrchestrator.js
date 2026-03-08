@@ -428,27 +428,28 @@ export class VoiceOrchestrator {
 
   /**
    * 简单的文本分段（用于兜底逻辑）
+   * 注意：避免把标点单独分成一段
    */
   splitTextForTTSSimple(text) {
     const MAX_LEN = 100;
     const segments = [];
     
-    // 按句子分割
-    const sentences = text.split(/([。！？.!?；;\n]+)/);
+    // 按句子分割（不保留分隔符，避免标点单独成段）
+    const sentences = text.split(/[。！？.!?；;\n]+/);
     let current = '';
     
     for (const part of sentences) {
-      if (!part) continue;
+      if (!part.trim()) continue;
       
       if ((current + part).length <= MAX_LEN) {
         current += part;
       } else {
-        if (current) segments.push(current);
+        if (current.trim()) segments.push(current.trim());
         current = part.length > MAX_LEN ? part.substring(0, MAX_LEN) : part;
       }
     }
     
-    if (current) segments.push(current);
+    if (current.trim()) segments.push(current.trim());
     return segments;
   }
 

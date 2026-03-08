@@ -321,13 +321,22 @@ export class SpeakerController {
    * 火山引擎 PCM 格式: 24kHz, 16bit, 单声道, 小端序
    */
   private decodePCM(pcmData: ArrayBuffer, sampleRate: number = 24000): AudioBuffer {
-    const pcmArray = new Int16Array(pcmData);
+    // 确保数据长度是偶数（16bit = 2 bytes）
+    let dataView = pcmData;
+    if (pcmData.byteLength % 2 !== 0) {
+      dataView = pcmData.slice(0, pcmData.byteLength - 1);
+    }
+    
+    const pcmArray = new Int16Array(dataView);
     const audioBuffer = this.audioContext!.createBuffer(1, pcmArray.length, sampleRate);
     const channelData = audioBuffer.getChannelData(0);
     
     // Int16 (-32768 ~ 32767) 转 Float32 (-1.0 ~ 1.0)
+    // 注意：-32768 会变为 -1.0，其他值按比例映射
     for (let i = 0; i < pcmArray.length; i++) {
-      channelData[i] = pcmArray[i] / 32768;
+      const val = pcmArray[i];
+      // 防止溢出：-32768 直接映射到 -1.0
+      channelData[i] = val < 0 ? val / 32768 : val / 32767;
     }
     
     return audioBuffer;

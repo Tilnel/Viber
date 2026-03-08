@@ -53,8 +53,8 @@ export class VolcanoTTSService {
     // 计算UTF-8字节长度
     const byteLength = (str) => Buffer.byteLength(str, 'utf8');
     
-    // 按句子拆分（优先在句号、问号、感叹号处分割）
-    const sentences = text.split(/([。！？.!?；;\n]+)/);
+    // 按句子拆分（优先在句号、问号、感叹号处分割，不保留分隔符）
+    const sentences = text.split(/[。！？.!?；;\n]+/);
     let currentSegment = '';
     
     for (let i = 0; i < sentences.length; i++) {
@@ -211,7 +211,11 @@ export class VolcanoTTSService {
 
         // 音频数据
         if (msgType === 0x0b || msgType === 0x00) {
-          const audioData = data.slice(8);
+          let audioData = data.slice(8);
+          // PCM 数据必须是偶数字节（16bit = 2 bytes）
+          if (audioData.length % 2 !== 0) {
+            audioData = audioData.slice(0, -1); // 去掉最后一个字节
+          }
           if (audioData.length > 0) {
             audioChunks.push(audioData);
             console.log(`[VolcanoTTSService] Audio chunk received: ${audioData.length} bytes, total chunks: ${audioChunks.length}`);
