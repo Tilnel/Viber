@@ -12,7 +12,6 @@
  */
 
 import { getViberSocketManager } from '../viber.js';
-import { createDetector } from '../../services/detector/index.js';
 import { ASRServiceFactory } from '../../services/asr/index.js';
 import { SpeakerControllerImpl } from '../../services/speaker/index.js';
 import { getUserTTSConfig } from '../../services/user/UserSettingsService.js';
@@ -23,7 +22,6 @@ import { getUserTTSConfig } from '../../services/user/UserSettingsService.js';
  */
 export function createVoiceHandlers(voiceOrchestrator) {
   // 初始化服务
-  const detector = createDetector({ type: 'volume' });
   const asrService = ASRServiceFactory.create('volcano');
   const speakerController = new SpeakerControllerImpl({
     maxQueueSize: 10,
@@ -89,7 +87,8 @@ export function createVoiceHandlers(voiceOrchestrator) {
         startTime: Date.now(),
         audioBuffer: [],
         transcript: '',
-        isRecording: true
+        isRecording: true,
+        ttsStopped: false  // 标记是否已停止 TTS（用于 ASR interim 打断）
       };
       
       activeStreams.set(streamId, streamInfo);
@@ -112,6 +111,18 @@ export function createVoiceHandlers(voiceOrchestrator) {
       
       // 设置 ASR 回调
       asrSession.on('interim', (result) => {
+        // 第一次收到 ASR 结果（第一个字），立即停止 TTS
+        if (result.text && result.text.trim().length > 0 && !streamInfo.ttsStopped) {
+          console.log(`[VoiceHandler] First ASR interim received: "${result.text}", stopping TTS`);
+          streamInfo.ttsStopped = true;
+          
+          // 发送 speaker:stop 给前端，停止 TTS 播放
+          socket.emit('message', {
+            type: 'speaker:stop',
+            data: { reason: 'asr_started', streamId }
+          });
+        }
+        
         socket.emit('message', {
           type: 'voice:asr:interim',
           data: {
@@ -136,7 +147,12 @@ export function createVoiceHandlers(voiceOrchestrator) {
         });
         
         // 交给 VoiceOrchestrator 处理后端 LLM + TTS 流程
+        // 流程：如果有正在进行的 LLM 对话，先打断它，再处理新的语音识别结果
         if (voiceOrchestrator) {
+          // 1. 先打断当前对话（停止 LLM 生成和 TTS）
+          voiceOrchestrator.interrupt(streamId);
+          
+          // 2. 处理新的语音识别结果
           voiceOrchestrator.handleASRResult(streamId, result.text);
         }
       });
@@ -172,6 +188,10 @@ export function createVoiceHandlers(voiceOrchestrator) {
 
     /**
      * 接收音频数据
+     * 
+     * 流程：
+     * 1. ASR 生成第一个字时，发送 speaker:stop 停止前端 TTS（在 interim 回调中处理）
+     * 2. 将音频发送给 ASR 进行识别
      */
     'voice:audio': async (socket, data) => {
       const { streamId, seq, audio, timestamp } = data;

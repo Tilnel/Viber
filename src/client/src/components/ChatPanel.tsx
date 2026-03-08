@@ -15,7 +15,7 @@ import { getViberSocket, ViberMessageType } from '../services/viberSocket';
 
 // 消息块类型
 interface MessageBlock {
-  type: 'text' | 'tool';
+  type: 'text' | 'tool' | 'thinking';
   id?: string;
   content?: string;
   operation?: string;
@@ -134,7 +134,25 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     
     // 监听 LLM 思考/开始（文字输入和语音输入都走这里）
     const unsubscribeThinking = socket.on(ViberMessageType.CHAT_THINKING, (data) => {
-      console.log('[ChatPanel] LLM started:', data);
+      console.log('[ChatPanel] LLM thinking:', data);
+      
+      // 如果是 AI thinking 内容（带有 content 字段）
+      if (data.content) {
+        // 添加 thinking 块到流式显示
+        flushSync(() => {
+          setStreamingBlocks(prev => {
+            const newBlocks = [...prev, { 
+              type: 'thinking' as const, 
+              content: data.content 
+            }];
+            streamingBlocksRef.current = newBlocks;
+            return newBlocks;
+          });
+        });
+        return;
+      }
+      
+      // 否则是语音对话开始信号（带有 text 字段表示用户输入）
       setIsVoiceFlowActive(true);
       voiceAccumulatedTextRef.current = '';
       
@@ -162,27 +180,71 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       const { content } = data;
       
       if (content) {
-        voiceAccumulatedTextRef.current += content;
-        
-        flushSync(() => {
-          setStreamingBlocks(prev => {
-            const lastBlock = prev[prev.length - 1];
-            if (lastBlock?.type === 'text') {
-              const newBlocks = [...prev];
-              newBlocks[newBlocks.length - 1] = {
-                ...lastBlock,
-                content: voiceAccumulatedTextRef.current
-              };
-              streamingBlocksRef.current = newBlocks;
-              return newBlocks;
-            } else {
-              const newBlocks = [...prev, { type: 'text' as const, content: content }];
-              streamingBlocksRef.current = newBlocks;
-              return newBlocks;
-            }
+        // 使用 requestAnimationFrame 确保下一帧立即渲染，减少视觉延迟
+        requestAnimationFrame(() => {
+          voiceAccumulatedTextRef.current += content;
+          
+          flushSync(() => {
+            setStreamingBlocks(prev => {
+              const lastBlock = prev[prev.length - 1];
+              if (lastBlock?.type === 'text') {
+                const newBlocks = [...prev];
+                newBlocks[newBlocks.length - 1] = {
+                  ...lastBlock,
+                  content: voiceAccumulatedTextRef.current
+                };
+                streamingBlocksRef.current = newBlocks;
+                return newBlocks;
+              } else {
+                const newBlocks = [...prev, { type: 'text' as const, content: voiceAccumulatedTextRef.current }];
+                streamingBlocksRef.current = newBlocks;
+                return newBlocks;
+              }
+            });
           });
         });
       }
+    });
+    
+    // 监听工具调用
+    const unsubscribeToolCall = socket.on(ViberMessageType.CHAT_TOOL_CALL, (data) => {
+      console.log('[ChatPanel] Tool call:', data);
+      flushSync(() => {
+        setStreamingBlocks(prev => {
+          const newBlocks = [...prev, {
+            type: 'tool' as const,
+            id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            operation: data.tool,
+            target: data.input?.path || data.input?.command || 
+                    data.input?.pattern || data.input?.url || data.input?.q || '',
+            result: '',
+            args: data.input
+          }];
+          streamingBlocksRef.current = newBlocks;
+          return newBlocks;
+        });
+      });
+    });
+    
+    // 监听工具结果
+    const unsubscribeToolResult = socket.on(ViberMessageType.CHAT_TOOL_RESULT, (data) => {
+      console.log('[ChatPanel] Tool result:', data);
+      flushSync(() => {
+        setStreamingBlocks(prev => {
+          // 找到最后一个工具调用块并更新结果
+          const lastToolIndex = prev.findLastIndex(b => b.type === 'tool' && !b.result);
+          if (lastToolIndex >= 0) {
+            const newBlocks = [...prev];
+            newBlocks[lastToolIndex] = {
+              ...newBlocks[lastToolIndex],
+              result: data.result
+            };
+            streamingBlocksRef.current = newBlocks;
+            return newBlocks;
+          }
+          return prev;
+        });
+      });
     });
     
     // 监听 LLM 完成
@@ -194,6 +256,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
         const finalBlocks = streamingBlocksRef.current.map(block => ({
           type: block.type,
           ...(block.type === 'text' 
+            ? { content: block.content }
+            : block.type === 'thinking'
             ? { content: block.content }
             : {
                 id: block.id,
@@ -228,6 +292,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
     return () => {
       unsubscribeThinking();
       unsubscribeDelta();
+      unsubscribeToolCall();
+      unsubscribeToolResult();
       unsubscribeComplete();
     };
   }, [currentSession]);
@@ -241,6 +307,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
         const finalBlocks = streamingBlocksRef.current.map(block => ({
           type: block.type,
           ...(block.type === 'text' 
+            ? { content: block.content }
+            : block.type === 'thinking'
             ? { content: block.content }
             : {
                 id: block.id,
@@ -613,6 +681,8 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
                 type: block.type,
                 ...(block.type === 'text' 
                   ? { content: block.content }
+                  : block.type === 'thinking'
+                  ? { content: block.content }
                   : {
                       id: block.id,
                       operation: block.operation,
@@ -719,6 +789,21 @@ export default function ChatPanel({ projectId }: ChatPanelProps) {
       if (block.type === 'text') {
         return (
           <div key={index} className="markdown-content">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content || ''}</ReactMarkdown>
+          </div>
+        );
+      } else if (block.type === 'thinking') {
+        return (
+          <div key={index} className="thinking-block" style={{ 
+            padding: '8px 12px', 
+            margin: '8px 0',
+            background: 'var(--bg-secondary)', 
+            borderRadius: '6px',
+            borderLeft: '3px solid var(--accent-color)',
+            fontStyle: 'italic',
+            color: 'var(--text-secondary)'
+          }}>
+            <div style={{ fontSize: '12px', marginBottom: '4px', opacity: 0.7 }}>思考中...</div>
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content || ''}</ReactMarkdown>
           </div>
         );

@@ -280,12 +280,15 @@ export class NewVoiceService {
 // 单例
 let globalNewVoiceService: NewVoiceService | null = null;
 let unsubscribeHandlers: (() => void)[] = [];
+let isCreating = false;
 
 export function getNewVoiceService(options?: NewVoiceServiceOptions): NewVoiceService {
-  if (!globalNewVoiceService) {
+  if (!globalNewVoiceService && !isCreating) {
+    isCreating = true;
     globalNewVoiceService = new NewVoiceService(options);
+    isCreating = false;
   }
-  return globalNewVoiceService;
+  return globalNewVoiceService!;
 }
 
 export function resetNewVoiceService(): void {

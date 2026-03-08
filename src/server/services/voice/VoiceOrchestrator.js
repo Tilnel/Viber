@@ -7,6 +7,53 @@
  */
 
 import { getChatService } from '../chat/ChatService.js';
+import { spawn, execSync } from 'child_process';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// 缓存 kimi 路径
+let kimiCliPath = null;
+
+/**
+ * 查找 PATH 中的 kimi 可执行文件
+ */
+function findKimiCli() {
+  if (kimiCliPath) return kimiCliPath;
+  
+  try {
+    // 使用 which 命令查找 kimi
+    kimiCliPath = execSync('which kimi', { encoding: 'utf8' }).trim();
+    console.log(`[VoiceOrchestrator] Found kimi at: ${kimiCliPath}`);
+    return kimiCliPath;
+  } catch (err) {
+    console.error('[VoiceOrchestrator] Could not find kimi in PATH, trying fallback locations');
+    // 回退到常见位置
+    const fallbacks = [
+      process.env.KIMI_CLI_PATH,
+      '/usr/local/bin/kimi',
+      '/usr/bin/kimi',
+      `${process.env.HOME}/.local/bin/kimi`,
+      'kimi' // 最后尝试直接执行，让 shell 处理
+    ].filter(Boolean);
+    
+    for (const path of fallbacks) {
+      try {
+        execSync(`test -x "${path}"`, { encoding: 'utf8' });
+        kimiCliPath = path;
+        console.log(`[VoiceOrchestrator] Using fallback kimi at: ${kimiCliPath}`);
+        return kimiCliPath;
+      } catch {
+        continue;
+      }
+    }
+    
+    // 如果都找不到，返回 'kimi' 让 shell 尝试
+    kimiCliPath = 'kimi';
+    return kimiCliPath;
+  }
+}
 
 /**
  * 语音对话上下文
@@ -52,7 +99,8 @@ export class VoiceOrchestrator {
     const dialog = new VoiceDialogContext({
       sessionId: data.sessionId,
       socketId: data.socketId,
-      userId: data.userId
+      userId: data.userId,
+      ttsConfig: data.ttsConfig
     });
     
     this.dialogs.set(streamId, dialog);
@@ -168,13 +216,15 @@ export class VoiceOrchestrator {
             fullResponse += text;
             ttsBuffer += text;
             
-            // 实时推送给前端显示
-            this.socketManager.sendToSocket(dialog.socketId, {
-              type: 'chat:delta',
-              data: {
-                streamId,
-                content: text
-              }
+            // 实时推送给前端显示（使用 setImmediate 确保消息立即发送）
+            setImmediate(() => {
+              this.socketManager.sendToSocket(dialog.socketId, {
+                type: 'chat:delta',
+                data: {
+                  streamId,
+                  content: text
+                }
+              });
             });
             
             // 累积足够文本后触发 TTS
@@ -187,10 +237,39 @@ export class VoiceOrchestrator {
                 ttsTriggered = true;
                 
                 // 异步合成 TTS（不等待，流式处理）
-                this.synthesizeAndPlay(streamId, ttsText).catch(err => {
-                  console.error(`[VoiceOrchestrator] TTS failed:`, err.message);
-                });
+                // 使用 setTimeout 确保在文本消息发送后再处理 TTS
+                setTimeout(() => {
+                  this.synthesizeAndPlay(streamId, ttsText).catch(err => {
+                    console.error(`[VoiceOrchestrator] TTS failed:`, err.message);
+                  });
+                }, 10);
               }
+            }
+          },
+          
+          onThinking: (thinking) => {
+            // Thinking 内容单独处理，立即触发 TTS
+            console.log(`[VoiceOrchestrator] Thinking received: "${thinking.substring(0, 50)}..."`);
+            
+            // 发送 thinking 给前端显示
+            setImmediate(() => {
+              this.socketManager.sendToSocket(dialog.socketId, {
+                type: 'chat:thinking',
+                data: {
+                  streamId,
+                  content: thinking
+                }
+              });
+            });
+            
+            // Thinking 内容立即触发 TTS（不等待后续内容）
+            if (thinking.trim()) {
+              ttsTriggered = true;
+              setTimeout(() => {
+                this.synthesizeAndPlay(streamId, thinking).catch(err => {
+                  console.error(`[VoiceOrchestrator] Thinking TTS failed:`, err.message);
+                });
+              }, 10);
             }
           },
           
@@ -224,10 +303,6 @@ export class VoiceOrchestrator {
             if (ttsBuffer.trim()) {
               console.log(`[VoiceOrchestrator] Processing remaining TTS buffer: ${ttsBuffer.length} chars`);
               await this.synthesizeAndPlay(streamId, ttsBuffer);
-            } else if (!ttsTriggered && fullResponse.trim()) {
-              // 兜底：如果从未触发过 TTS，朗读全部回复
-              console.log(`[VoiceOrchestrator] TTS fallback - speaking full response: ${fullResponse.length} chars`);
-              await this.synthesizeAndPlay(streamId, fullResponse);
             }
             
             // 通知前端完成
@@ -273,11 +348,11 @@ export class VoiceOrchestrator {
 
   /**
    * 判断是否触发 TTS
-   * 策略：遇到标点符号或累积足够字符
+   * 策略：遇到标点符号或累积 20 个字符立即触发
    */
   shouldTriggerTTS(buffer) {
-    // 超过 50 字符触发
-    if (buffer.length >= 50) return true;
+    // 超过 20 字符立即触发
+    if (buffer.length >= 20) return true;
     
     // 遇到完整句子标点触发
     if (/[。！？.!?\n]/.test(buffer)) return true;
@@ -290,7 +365,7 @@ export class VoiceOrchestrator {
    * 限制最大长度，避免一次性合成过长音频
    */
   extractTTSText(buffer) {
-    const MAX_TTS_LENGTH = 100; // 最大 100 字符，保证快速响应
+    const MAX_TTS_LENGTH = 100; // 最大 100 字符
     
     // 找到第一个句子结束位置（使用非贪婪匹配找到第一个标点）
     const match = buffer.match(/^.+?[。！？.!?\n]/);
@@ -302,8 +377,8 @@ export class VoiceOrchestrator {
       return match[0];
     }
     
-    // 如果没有标点，但有足够字符，返回一段（限制长度）
-    if (buffer.length >= 50) {
+    // 如果没有标点，但超过 20 字符，立即返回（最多 100 字符）
+    if (buffer.length >= 20) {
       return buffer.substring(0, Math.min(buffer.length, MAX_TTS_LENGTH));
     }
     
@@ -313,8 +388,11 @@ export class VoiceOrchestrator {
   /**
    * 合成并播放 TTS（支持长文本分段）
    * 长文本会分成多段，每段合成后立即发送给前端
+   * 新增：文本会先经过 kimi-cli 快速模型清洗，去除 markdown、代码等
    */
   async synthesizeAndPlay(streamId, text) {
+    console.log(`[VoiceOrchestrator] synthesizeAndPlay called for ${streamId}, text: "${text?.substring(0, 30)}..."`);
+    
     const dialog = this.dialogs.get(streamId);
     if (!dialog) {
       console.log(`[VoiceOrchestrator] TTS skipped: dialog not found for ${streamId}`);
@@ -330,10 +408,14 @@ export class VoiceOrchestrator {
     const { voice, speed } = dialog.ttsConfig;
     const trimmedText = text.trim();
     
+    // 先使用 kimi-cli 快速模型清洗文本（去除 markdown、代码等，口语化）
+    console.log(`[VoiceOrchestrator] Cleaning text for TTS: "${trimmedText.substring(0, 50)}..."`);
+    const cleanedText = await this.cleanTextForTTS(trimmedText);
+    
     // 如果文本较长，先分段
-    if (trimmedText.length > 100) {
-      console.log(`[VoiceOrchestrator] TTS long text (${trimmedText.length} chars), splitting...`);
-      const segments = this.splitTextForTTSSimple(trimmedText);
+    if (cleanedText.length > 100) {
+      console.log(`[VoiceOrchestrator] TTS long text (${cleanedText.length} chars), splitting...`);
+      const segments = this.splitTextForTTSSimple(cleanedText);
       for (const segment of segments) {
         await this.synthesizeAndSend(streamId, dialog, segment, voice, speed);
       }
@@ -341,7 +423,7 @@ export class VoiceOrchestrator {
     }
     
     // 短文本直接合成
-    await this.synthesizeAndSend(streamId, dialog, trimmedText, voice, speed);
+    await this.synthesizeAndSend(streamId, dialog, cleanedText, voice, speed);
   }
 
   /**
@@ -405,6 +487,111 @@ export class VoiceOrchestrator {
     } catch (error) {
       console.error(`[VoiceOrchestrator] TTS error in synthesizeAndSend:`, error.message);
     }
+  }
+
+  /**
+   * 使用 kimi-cli 清洗文本，使其适合 TTS 朗读
+   * 使用普通模型（非 kimi-fast）以获得更好的清洗效果
+   */
+  async cleanTextForTTS(text) {
+    // 短文本不需要清洗
+    if (text.length < 10) {
+      return text;
+    }
+    
+    console.log(`[VoiceOrchestrator] cleanTextForTTS called with: "${text.substring(0, 50)}..."`);
+    
+    const cleanPrompt = `任务：将以下文本转换为适合语音朗读的纯文本。
+
+要求：
+1. 删除所有 Markdown 格式符号（## ** * - > | 等）
+2. 删除所有 HTML 标签
+3. 将 URL 替换为"链接"
+4. 将数字转为中文读法：123→一百二十三
+5. 将代码块替换为"代码片段"
+6. 表格内容用文字描述
+7. 最终文本必须口语化、自然流畅
+
+关键：只输出清洗后的纯文本，不要任何解释、不要包含上述规则说明。
+
+待清洗：
+${text}
+
+清洗后：
+`;
+
+    return new Promise((resolve, reject) => {
+      // 查找 PATH 中的 kimi
+      const kimiPath = findKimiCli();
+      
+      console.log(`[VoiceOrchestrator] Spawning kimi-cli for text cleaning...`);
+      
+      // 使用默认模型进行清洗（kimi-fast 无法处理此任务）
+      const args = [
+        '--print',
+        '--final-message-only',
+        '-p', cleanPrompt
+      ];
+      console.log(`[VoiceOrchestrator] Command: ${kimiPath} ${args.join(' ')}`);
+      
+      const kimiProcess = spawn(kimiPath, args, {
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: '1',
+          KIMI_MODEL_NAME: 'kimi-k2-5-lite'  // 使用轻量级模型
+        },
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      
+      // 捕获 spawn 错误
+      kimiProcess.on('error', (err) => {
+        console.error(`[VoiceOrchestrator] Failed to spawn kimi-cli: ${err.message}`);
+        resolve(text); // 失败时返回原文本
+      });
+
+      let output = '';
+      let errorOutput = '';
+
+      kimiProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      kimiProcess.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      kimiProcess.on('close', (code) => {
+        console.log(`[VoiceOrchestrator] kimi-cli exited with code: ${code}`);
+        if (code !== 0) {
+          console.error(`[VoiceOrchestrator] Clean text failed: ${errorOutput}`);
+          resolve(text);
+          return;
+        }
+        
+        // 直接取输出内容（--final-message-only 只返回最终结果）
+        let cleaned = output.trim();
+        
+        // 简单校验：如果输出明显有问题，回退到原文
+        if (cleaned.length > text.length * 5 || 
+            cleaned.includes('你是一个文本清洗助手') ||
+            cleaned.includes('待清洗文本：\n')) {
+          console.log(`[VoiceOrchestrator] Cleaned text failed validation, using original`);
+          cleaned = text;
+        } else {
+          console.log(`[VoiceOrchestrator] Cleaned text: "${cleaned.substring(0, 50)}..." (${cleaned.length} chars)`);
+        }
+        
+        resolve(cleaned);
+      });
+
+      // 注：取消超时保护，等待模型完成
+      // 如需超时，可取消下面注释并设置合适时间
+      // setTimeout(() => {
+      //   console.log('[VoiceOrchestrator] Clean text timeout, killing process');
+      //   kimiProcess.kill();
+      //   resolve(text);
+      // }, 30000);
+    });
   }
 
   /**

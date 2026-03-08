@@ -18,28 +18,29 @@ const DEFAULT_SETTINGS = {
 
 /**
  * 获取用户设置
+ * 注意：目前使用全局 settings 表（id=1），而非 user_settings 表
  */
 export async function getUserSettings(userId) {
   try {
+    // 从全局 settings 表读取（与 /settings 路由一致）
+    // 注意：字段名是 tts_engine, tts_voice, voice_speed（不是 tts_speed）
     const { rows } = await query(`
-      SELECT tts_engine, tts_voice, tts_speed, tts_volume, auto_speak_ai_response
-      FROM user_settings
-      WHERE user_id = $1
-    `, [userId]);
+      SELECT tts_engine, tts_voice, voice_speed
+      FROM settings
+      WHERE id = 1
+    `);
     
     if (rows.length > 0) {
       const row = rows[0];
       return {
         ttsEngine: row.tts_engine,
         ttsVoice: row.tts_voice,
-        ttsSpeed: parseFloat(row.tts_speed),
-        ttsVolume: parseFloat(row.tts_volume),
-        autoSpeakAIResponse: row.auto_speak_ai_response
+        ttsSpeed: parseFloat(row.voice_speed) || 1.0,
+        ttsVolume: DEFAULT_SETTINGS.ttsVolume,
+        autoSpeakAIResponse: DEFAULT_SETTINGS.autoSpeakAIResponse
       };
     }
     
-    // 没有设置，创建默认
-    await createDefaultSettings(userId);
     return { ...DEFAULT_SETTINGS };
   } catch (error) {
     console.error('[UserSettingsService] getUserSettings error:', error);
@@ -126,11 +127,11 @@ export async function updateUserSettings(userId, settings) {
 export async function getUserTTSConfig(userId) {
   const settings = await getUserSettings(userId);
   return {
-    voice: settings.ttsVoice,
-    speed: settings.ttsSpeed,
-    volume: settings.ttsVolume,
-    engine: settings.ttsEngine,
-    autoSpeak: settings.autoSpeakAIResponse
+    voice: settings.ttsVoice || DEFAULT_SETTINGS.ttsVoice,
+    speed: settings.ttsSpeed || DEFAULT_SETTINGS.ttsSpeed,
+    volume: settings.ttsVolume || DEFAULT_SETTINGS.ttsVolume,
+    engine: settings.ttsEngine || DEFAULT_SETTINGS.ttsEngine,
+    autoSpeak: settings.autoSpeakAIResponse ?? DEFAULT_SETTINGS.autoSpeakAIResponse
   };
 }
 

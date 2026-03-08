@@ -46,6 +46,9 @@ export class SpeakerController {
   
   // 状态
   private isProcessing = false;
+  
+  // 当前播放完成回调（用于通知 playAudio 的 Promise）
+  private currentOnComplete: (() => void) | null = null;
 
   constructor(options: SpeakerOptions = {}) {
     this.options = options;
@@ -92,6 +95,7 @@ export class SpeakerController {
 
   /**
    * 播放音频数据（由后端调用）
+   * 返回 Promise，在音频播放完成后 resolve
    */
   async playAudio(task: SpeakerTask): Promise<void> {
     if (!this.audioContext) {
@@ -107,42 +111,55 @@ export class SpeakerController {
     this.setState('playing');
     this.options.onTaskStart?.(task);
     
-    try {
-      let audioBuffer: AudioBuffer;
+    return new Promise((resolve, reject) => {
+      // 存储完成回调，供 onPlaybackComplete 调用
+      this.currentOnComplete = resolve;
       
-      if (task.audioData) {
-        // 解码音频数据
-        audioBuffer = await this.audioContext!.decodeAudioData(task.audioData.slice(0));
-      } else if (task.audioUrl) {
-        // 从 URL 加载
-        const response = await fetch(task.audioUrl);
-        const arrayBuffer = await response.arrayBuffer();
-        audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
-      } else {
-        throw new Error('No audio data or URL provided');
-      }
-      
-      // 创建音频源
-      this.currentSource = this.audioContext!.createBufferSource();
-      this.currentSource.buffer = audioBuffer;
-      this.currentSource.connect(this.gainNode!);
-      
-      // 播放完成回调
-      this.currentSource.onended = () => {
+      try {
+        this.decodeAndPlay(task);
+      } catch (error) {
+        console.error('[SpeakerController] Play failed:', error);
+        this.options.onError?.('播放音频失败');
         this.onPlaybackComplete();
-      };
-      
-      // 开始播放
-      this.startTime = this.audioContext!.currentTime;
-      this.currentSource.start(0);
-      
-      console.log(`[SpeakerController] Playing task ${task.id}, duration: ${audioBuffer.duration}s`);
-      
-    } catch (error) {
-      console.error('[SpeakerController] Play failed:', error);
-      this.options.onError?.('播放音频失败');
-      this.onPlaybackComplete();
+        this.currentOnComplete = null;
+        reject(error);
+      }
+    });
+  }
+  
+  /**
+   * 解码并播放音频
+   */
+  private async decodeAndPlay(task: SpeakerTask): Promise<void> {
+    let audioBuffer: AudioBuffer;
+    
+    if (task.audioData) {
+      // 解码音频数据
+      audioBuffer = await this.audioContext!.decodeAudioData(task.audioData.slice(0));
+    } else if (task.audioUrl) {
+      // 从 URL 加载
+      const response = await fetch(task.audioUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
+    } else {
+      throw new Error('No audio data or URL provided');
     }
+    
+    // 创建音频源
+    this.currentSource = this.audioContext!.createBufferSource();
+    this.currentSource.buffer = audioBuffer;
+    this.currentSource.connect(this.gainNode!);
+    
+    // 播放完成回调 - 关键：触发 onPlaybackComplete
+    this.currentSource.onended = () => {
+      this.onPlaybackComplete();
+    };
+    
+    // 开始播放
+    this.startTime = this.audioContext!.currentTime;
+    this.currentSource.start(0);
+    
+    console.log(`[SpeakerController] Playing task ${task.id}, duration: ${audioBuffer.duration}s`);
   }
 
   /**
@@ -271,6 +288,12 @@ export class SpeakerController {
    * 播放完成回调
    */
   private onPlaybackComplete(): void {
+    // 通知 playAudio 的 Promise 完成
+    if (this.currentOnComplete) {
+      this.currentOnComplete();
+      this.currentOnComplete = null;
+    }
+    
     if (this.currentTask) {
       this.options.onTaskComplete?.(this.currentTask);
       this.currentTask = null;
@@ -309,12 +332,15 @@ export class SpeakerController {
 
 // 单例导出
 let globalSpeakerController: SpeakerController | null = null;
+let isCreatingSpeaker = false;
 
 export function getSpeakerController(options?: SpeakerOptions): SpeakerController {
-  if (!globalSpeakerController) {
+  if (!globalSpeakerController && !isCreatingSpeaker) {
+    isCreatingSpeaker = true;
     globalSpeakerController = new SpeakerController(options);
+    isCreatingSpeaker = false;
   }
-  return globalSpeakerController;
+  return globalSpeakerController!;
 }
 
 export function resetSpeakerController(): void {

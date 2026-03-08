@@ -229,23 +229,14 @@ export class VoiceSocketService {
   private registerHandlers(): void {
     if (!this.socket) return;
 
-    // 播报指令
-    this.socket.on(VoiceMessageType.SPEAKER_PLAY, (data: SpeakerTaskMessage) => {
-      console.log('[VoiceSocket] Received speaker play:', data.taskId);
-      this.options.onSpeakerTask?.(data);
-    });
-
+    // 注意：播报指令已由 NewVoiceService 统一处理
+    // 这里不再监听 speaker:play，避免重复播放
+    // this.socket.on(VoiceMessageType.SPEAKER_PLAY, ...);
+    
+    // 只保留停止指令用于兼容性
     this.socket.on(VoiceMessageType.SPEAKER_STOP, () => {
       console.log('[VoiceSocket] Received speaker stop');
       this.options.onSpeakerStop?.();
-    });
-
-    this.socket.on(VoiceMessageType.SPEAKER_PAUSE, () => {
-      console.log('[VoiceSocket] Received speaker pause');
-    });
-
-    this.socket.on(VoiceMessageType.SPEAKER_RESUME, () => {
-      console.log('[VoiceSocket] Received speaker resume');
     });
 
     // ASR 结果

@@ -10,7 +10,7 @@
  */
 
 import { SimpleRecorder, RecorderState } from './SimpleRecorder';
-import { SpeakerController, SpeakerState, SpeakerTask } from './SpeakerController';
+import { SpeakerController, SpeakerState, SpeakerTask, getSpeakerController } from './SpeakerController';
 import { VoiceSocketService, VoiceMessageType, SpeakerTaskMessage } from './VoiceSocketService';
 
 export type VoiceServiceState = 'idle' | 'listening' | 'processing' | 'speaking';
@@ -49,8 +49,8 @@ export class VoiceService {
       onError: (error) => this.handleError(error)
     });
     
-    // 初始化播放器
-    this.speaker = new SpeakerController({
+    // 初始化播放器（使用单例，避免与 NewVoiceService 重复创建）
+    this.speaker = getSpeakerController({
       onStateChange: (state) => this.handleSpeakerStateChange(state),
       onTaskStart: (task) => console.log('[VoiceService] Task start:', task.id),
       onTaskComplete: (task) => this.handleTaskComplete(task),
@@ -313,6 +313,7 @@ export class VoiceService {
 let globalVoiceService: VoiceService | null = null;
 
 export function getVoiceService(options?: VoiceServiceOptions): VoiceService {
+  console.warn('[VoiceService] 已弃用，请使用 getNewVoiceService()');
   if (!globalVoiceService) {
     globalVoiceService = new VoiceService(options);
   }

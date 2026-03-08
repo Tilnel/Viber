@@ -75,7 +75,7 @@ export class ChatService {
    */
   async sendMessage(options, handlers = {}) {
     const { sessionId, content, context = {}, skipUserMessageSave = false } = options;
-    const { onTextDelta, onToolCall, onToolResult, onComplete, onError } = handlers;
+    const { onTextDelta, onThinking, onToolCall, onToolResult, onComplete, onError } = handlers;
 
     if (!this.kimiPath) {
       throw new Error('Kimi CLI not found. Please install kimi-cli: npm install -g kimi-cli');
@@ -195,11 +195,13 @@ export class ChatService {
     }
 
     // 启动 kimi 进程
+    // PYTHONUNBUFFERED=1 强制 Python 标准输出无缓冲，确保实时流式输出
     const kimiProcess = spawn(pythonPath, [this.kimiPath, ...kimiArgs, '-p', fullPrompt], {
       cwd: projectCwd,
       env: {
         ...process.env,
-        KIMI_PLATFORM: 'kimi-code'
+        KIMI_PLATFORM: 'kimi-code',
+        PYTHONUNBUFFERED: '1'
       },
       stdio: ['pipe', 'pipe', 'pipe']
     });
@@ -294,7 +296,7 @@ export class ChatService {
               pendingToolCalls.delete(toolId);
             }
 
-            // 处理助手文本内容
+            // 处理助手文本内容（包括 thinking 和正式回复）
             if (parsed.role === 'assistant' && parsed.content) {
               let textContent = '';
               
@@ -309,14 +311,36 @@ export class ChatService {
               }
               
               if (textContent) {
-                assistantContent += textContent;
-                const lastBlock = assistantBlocks[assistantBlocks.length - 1];
-                if (lastBlock && lastBlock.type === 'text') {
-                  lastBlock.content += textContent;
+                // 解析 thinking 内容（<think> 标签包裹的内容）
+                const thinkMatch = textContent.match(/<think>([\s\S]*?)<\/think>/);
+                if (thinkMatch) {
+                  const thinkingContent = thinkMatch[1].trim();
+                  if (thinkingContent) {
+                    // 单独回调 thinking 内容，用于 TTS
+                    onThinking?.(thinkingContent);
+                    
+                    // 添加 thinking 块到 assistantBlocks
+                    assistantBlocks.push({ type: 'thinking', content: thinkingContent });
+                  }
+                  
+                  // 提取正式回复内容（think 标签之后的内容）
+                  const afterThink = textContent.split('<\/think>')[1]?.trim();
+                  if (afterThink) {
+                    assistantContent += afterThink;
+                    assistantBlocks.push({ type: 'text', content: afterThink });
+                    onTextDelta?.(afterThink);
+                  }
                 } else {
-                  assistantBlocks.push({ type: 'text', content: textContent });
+                  // 普通文本内容
+                  assistantContent += textContent;
+                  const lastBlock = assistantBlocks[assistantBlocks.length - 1];
+                  if (lastBlock && lastBlock.type === 'text') {
+                    lastBlock.content += textContent;
+                  } else {
+                    assistantBlocks.push({ type: 'text', content: textContent });
+                  }
+                  onTextDelta?.(textContent);
                 }
-                onTextDelta?.(textContent);
               }
             }
 

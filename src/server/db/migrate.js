@@ -114,8 +114,18 @@ const migrations = [
       ALTER TABLE settings 
         ADD COLUMN IF NOT EXISTS tts_engine VARCHAR(20) DEFAULT 'volcano',
         ADD COLUMN IF NOT EXISTS tts_voice VARCHAR(50) DEFAULT 'BV001_streaming',
+        ADD COLUMN IF NOT EXISTS voice_speed DECIMAL(3,2) DEFAULT 1.0,
         ADD COLUMN IF NOT EXISTS vad_threshold REAL DEFAULT 0.025,
         ADD COLUMN IF NOT EXISTS vad_silence_timeout INTEGER DEFAULT 2000;
+    `
+  },
+  {
+    version: 3,
+    name: 'Add voice_speed column',
+    sql: `
+      -- 添加 voice_speed 列（如果还不存在）
+      ALTER TABLE settings 
+        ADD COLUMN IF NOT EXISTS voice_speed DECIMAL(3,2) DEFAULT 1.0;
     `
   }
 ];
