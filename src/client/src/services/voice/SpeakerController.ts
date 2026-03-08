@@ -18,6 +18,7 @@ export interface SpeakerTask {
   audioData?: ArrayBuffer;
   audioUrl?: string;
   format?: string;
+  sampleRate?: number;
   duration?: number;
 }
 
@@ -134,8 +135,14 @@ export class SpeakerController {
     let audioBuffer: AudioBuffer;
     
     if (task.audioData) {
-      // 解码音频数据
-      audioBuffer = await this.audioContext!.decodeAudioData(task.audioData.slice(0));
+      // 根据格式解码
+      if (task.format === 'pcm') {
+        // PCM 格式：直接创建 AudioBuffer
+        audioBuffer = this.decodePCM(task.audioData, task.sampleRate || 24000);
+      } else {
+        // MP3 等其他格式：使用浏览器解码
+        audioBuffer = await this.audioContext!.decodeAudioData(task.audioData.slice(0));
+      }
     } else if (task.audioUrl) {
       // 从 URL 加载
       const response = await fetch(task.audioUrl);
@@ -307,6 +314,23 @@ export class SpeakerController {
     } else {
       this.setState('idle');
     }
+  }
+
+  /**
+   * 解码 PCM 数据为 AudioBuffer
+   * 火山引擎 PCM 格式: 24kHz, 16bit, 单声道, 小端序
+   */
+  private decodePCM(pcmData: ArrayBuffer, sampleRate: number = 24000): AudioBuffer {
+    const pcmArray = new Int16Array(pcmData);
+    const audioBuffer = this.audioContext!.createBuffer(1, pcmArray.length, sampleRate);
+    const channelData = audioBuffer.getChannelData(0);
+    
+    // Int16 (-32768 ~ 32767) 转 Float32 (-1.0 ~ 1.0)
+    for (let i = 0; i < pcmArray.length; i++) {
+      channelData[i] = pcmArray[i] / 32768;
+    }
+    
+    return audioBuffer;
   }
 
   /**

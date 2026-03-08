@@ -477,7 +477,8 @@ export class VoiceOrchestrator {
           type: 'response',
           text,
           audioData: audioBase64,
-          format: result.format || 'mp3',
+          format: result.format || 'pcm',
+          sampleRate: result.sampleRate || 24000,
           duration: result.duration
         }
       };

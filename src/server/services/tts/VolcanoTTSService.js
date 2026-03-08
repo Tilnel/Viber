@@ -138,7 +138,8 @@ export class VolcanoTTSService {
         },
         audio: {
           voice_type: voice,
-          encoding: 'mp3',
+          encoding: 'pcm',
+          sample_rate: 24000,
           speed_ratio: speed
         },
         request: {
@@ -232,7 +233,8 @@ export class VolcanoTTSService {
             console.log(`[VolcanoTTSService] Resolving with ${finalBuffer.length} bytes of audio`);
             resolve({
               audioData: finalBuffer,
-              format: 'mp3',
+              format: 'pcm',
+              sampleRate: 24000,
               duration: this.estimateDuration(text)
             });
           } else {
@@ -324,7 +326,8 @@ export class VolcanoTTSService {
     
     return {
       audioData: mergedAudio,
-      format: 'mp3',
+      format: 'pcm',
+      sampleRate: 24000,
       duration: totalDuration
     };
   }

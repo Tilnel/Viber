@@ -233,6 +233,7 @@ export class NewVoiceService {
         text: data.text,
         audioData,
         format: data.format,
+        sampleRate: data.sampleRate,
         duration: data.duration
       });
     }));
