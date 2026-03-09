@@ -375,7 +375,7 @@ export class VolcanoASRSession extends ASRSession {
         reqid,
         sequence: 1,
         show_utterances: this.config.engineConfig?.showUtterances ?? true,
-        result_type: 'single',
+        result_type: 'continuous',  // 返回中间结果，用于实时打断
         enable_itn: this.config.engineConfig?.enableITN ?? true,
         enable_punctuation: this.config.engineConfig?.enablePunctuation ?? true
       }
