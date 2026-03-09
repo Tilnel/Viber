@@ -88,7 +88,8 @@ export function createVoiceHandlers(voiceOrchestrator) {
         audioBuffer: [],
         transcript: '',
         isRecording: true,
-        ttsStopped: false  // 标记是否已停止 TTS（用于 ASR interim 打断）
+        ttsStopped: false,      // 标记是否已停止 TTS（用于 ASR interim 打断）
+        finalProcessed: false   // 标记 final 是否已处理（防止重复）
       };
       
       activeStreams.set(streamId, streamInfo);
@@ -133,6 +134,13 @@ export function createVoiceHandlers(voiceOrchestrator) {
       });
       
       asrSession.on('final', (result) => {
+        // 防止重复处理 final 结果
+        if (streamInfo.finalProcessed) {
+          console.log(`[VoiceHandler] ASR final already processed, ignoring`);
+          return;
+        }
+        streamInfo.finalProcessed = true;
+        
         console.log(`[VoiceHandler] ASR final: "${result.text}"`);
         streamInfo.transcript = result.text;
         
