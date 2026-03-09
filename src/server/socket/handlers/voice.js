@@ -147,10 +147,11 @@ export function createVoiceHandlers(voiceOrchestrator) {
         });
         
         // 交给 VoiceOrchestrator 处理后端 LLM + TTS 流程
-        // 流程：如果有正在进行的 LLM 对话，先打断它，再处理新的语音识别结果
         if (voiceOrchestrator) {
-          // 1. 先打断当前对话（停止 LLM 生成和 TTS）
-          voiceOrchestrator.interrupt(streamId);
+          // 1. 如果 interim 没有打断过（用户开始说话时 TTS 没在播放），这里打断 LLM
+          if (!streamInfo.ttsStopped) {
+            voiceOrchestrator.interrupt(streamId);
+          }
           
           // 2. 处理新的语音识别结果
           voiceOrchestrator.handleASRResult(streamId, result.text);
