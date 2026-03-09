@@ -492,8 +492,8 @@ export class VoiceOrchestrator {
   }
 
   /**
-   * 使用 kimi-cli 清洗文本，使其适合 TTS 朗读
-   * 使用普通模型（非 kimi-fast）以获得更好的清洗效果
+   * 使用本地 Ollama 模型清洗文本，使其适合 TTS 朗读
+   * 结果控制在 300 字以内
    */
   async cleanTextForTTS(text) {
     // 短文本不需要清洗
@@ -501,99 +501,65 @@ export class VoiceOrchestrator {
       return text;
     }
     
-    console.log(`[VoiceOrchestrator] cleanTextForTTS called with: "${text.substring(0, 50)}..."`);
+    console.log(`[VoiceOrchestrator] cleanTextForTTS (Ollama) called with: "${text.substring(0, 50)}..." (${text.length} chars)`);
     
-    const cleanPrompt = `任务：将以下文本转换为适合语音朗读的纯文本。
+    const cleanPrompt = `将以下文本转换为适合语音朗读的纯文本，控制在300字以内。
 
 要求：
 1. 删除所有 Markdown 格式符号（## ** * - > | 等）
 2. 删除所有 HTML 标签
 3. 将 URL 替换为"链接"
-4. 将数字转为中文读法：123→一百二十三
-5. 将代码块替换为"代码片段"
-6. 表格内容用文字描述
-7. 最终文本必须口语化、自然流畅
+4. 代码块替换为一句话描述
+5. 表格用文字描述关键信息
+6. 口语化、自然流畅
+7. 只输出清洗后的纯文本，不要解释
 
-关键：只输出清洗后的纯文本，不要任何解释、不要包含上述规则说明。
-
-待清洗：
+待清洗文本：
 ${text}
 
-清洗后：
-`;
+清洗后（300字以内）：`;
 
-    return new Promise((resolve, reject) => {
-      // 查找 PATH 中的 kimi
-      const kimiPath = findKimiCli();
+    try {
+      const response = await fetch('http://localhost:11434/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'qwen2.5:0.5b',
+          messages: [
+            { role: 'system', content: '你是文本清洗助手，只输出清洗后的纯文本，不要解释。' },
+            { role: 'user', content: cleanPrompt }
+          ],
+          temperature: 0.3,
+          max_tokens: 500
+        })
+      });
+
+      if (!response.ok) {
+        console.error(`[VoiceOrchestrator] Ollama request failed: ${response.status}`);
+        return text;
+      }
+
+      const data = await response.json();
+      let cleaned = data.choices?.[0]?.message?.content?.trim() || '';
       
-      console.log(`[VoiceOrchestrator] Spawning kimi-cli for text cleaning...`);
+      // 如果结果超过300字，截断
+      if (cleaned.length > 300) {
+        cleaned = cleaned.substring(0, 300) + '...';
+      }
       
-      // 使用默认模型进行清洗（kimi-fast 无法处理此任务）
-      const args = [
-        '--print',
-        '--final-message-only',
-        '-p', cleanPrompt
-      ];
-      console.log(`[VoiceOrchestrator] Command: ${kimiPath} ${args.join(' ')}`);
+      // 简单校验
+      if (cleaned.length < 5 || cleaned.includes('文本清洗') || cleaned.includes('待清洗')) {
+        console.log(`[VoiceOrchestrator] Ollama result invalid, using original`);
+        return text;
+      }
       
-      const kimiProcess = spawn(kimiPath, args, {
-        env: {
-          ...process.env,
-          PYTHONUNBUFFERED: '1',
-          KIMI_MODEL_NAME: 'kimi-k2-5-lite'  // 使用轻量级模型
-        },
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
+      console.log(`[VoiceOrchestrator] Ollama cleaned: "${cleaned.substring(0, 50)}..." (${cleaned.length} chars)`);
+      return cleaned;
       
-      // 捕获 spawn 错误
-      kimiProcess.on('error', (err) => {
-        console.error(`[VoiceOrchestrator] Failed to spawn kimi-cli: ${err.message}`);
-        resolve(text); // 失败时返回原文本
-      });
-
-      let output = '';
-      let errorOutput = '';
-
-      kimiProcess.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-
-      kimiProcess.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
-      kimiProcess.on('close', (code) => {
-        console.log(`[VoiceOrchestrator] kimi-cli exited with code: ${code}`);
-        if (code !== 0) {
-          console.error(`[VoiceOrchestrator] Clean text failed: ${errorOutput}`);
-          resolve(text);
-          return;
-        }
-        
-        // 直接取输出内容（--final-message-only 只返回最终结果）
-        let cleaned = output.trim();
-        
-        // 简单校验：如果输出明显有问题，回退到原文
-        if (cleaned.length > text.length * 5 || 
-            cleaned.includes('你是一个文本清洗助手') ||
-            cleaned.includes('待清洗文本：\n')) {
-          console.log(`[VoiceOrchestrator] Cleaned text failed validation, using original`);
-          cleaned = text;
-        } else {
-          console.log(`[VoiceOrchestrator] Cleaned text: "${cleaned.substring(0, 50)}..." (${cleaned.length} chars)`);
-        }
-        
-        resolve(cleaned);
-      });
-
-      // 注：取消超时保护，等待模型完成
-      // 如需超时，可取消下面注释并设置合适时间
-      // setTimeout(() => {
-      //   console.log('[VoiceOrchestrator] Clean text timeout, killing process');
-      //   kimiProcess.kill();
-      //   resolve(text);
-      // }, 30000);
-    });
+    } catch (error) {
+      console.error(`[VoiceOrchestrator] Ollama error: ${error.message}`);
+      return text; // 失败时返回原文本
+    }
   }
 
   /**
