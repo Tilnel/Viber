@@ -117,7 +117,10 @@ export class ViberSocketManager {
           return this.sendError(socket, 'INVALID_MESSAGE', 'Message type is required', id);
         }
         
-        console.log(`[ViberSocket] Received ${type} from ${socket.id}`);
+        // 过滤高频日志（voice:audio 每帧都发，太频繁）
+        if (type !== 'voice:audio') {
+          console.log(`[ViberSocket] Received ${type} from ${socket.id}`);
+        }
         
         // 查找处理器
         const handler = this.handlers.get(type);

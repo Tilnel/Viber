@@ -515,9 +515,7 @@ export class VoiceOrchestrator {
 7. 只输出清洗后的纯文本，不要解释
 
 待清洗文本：
-${text}
-
-清洗后（300字以内）：`;
+${text}`;
 
     try {
       const response = await fetch('http://localhost:11434/v1/chat/completions', {

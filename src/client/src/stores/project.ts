@@ -346,13 +346,28 @@ export const useProjectStore = create<ProjectState>()(
       // 然后逐个重新加载所有已展开的目录
       // 使用 Array.from 避免在 async 操作中遍历 Set 出现问题
       const expandedPaths = Array.from(expandedDirs);
+      const dirsToRemove: string[] = [];
+      
       for (const dirPath of expandedPaths) {
         try {
           await get().loadDirectory(dirPath, true);
         } catch (e) {
-          // 如果某个目录加载失败（可能被删除），从展开列表中移除
-          console.warn('Failed to refresh directory:', dirPath);
+          // 如果某个目录加载失败（可能被删除），标记为需要移除
+          console.warn('Failed to refresh directory, will remove from expanded:', dirPath);
+          dirsToRemove.push(dirPath);
         }
+      }
+      
+      // 从展开列表中移除不存在的目录
+      if (dirsToRemove.length > 0) {
+        set(state => {
+          const newExpanded = new Set(state.expandedDirs);
+          dirsToRemove.forEach(path => newExpanded.delete(path));
+          if (state.currentProject) {
+            persistExpandedDirs(state.currentProject.id, newExpanded);
+          }
+          return { expandedDirs: newExpanded };
+        });
       }
     } catch (error) {
       console.error('Failed to refresh file tree:', error);
