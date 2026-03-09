@@ -109,11 +109,11 @@ export function createVoiceHandlers(voiceOrchestrator) {
         });
       }
       
-      // 设置 ASR 回调
+      // 设置 ASR 回调 - 收到第一个 interim 结果立即打断 TTS
       asrSession.on('interim', (result) => {
-        // 第一次收到 ASR 结果（第一个字），立即停止 TTS
-        if (result.text && result.text.trim().length > 0 && !streamInfo.ttsStopped) {
-          console.log(`[VoiceHandler] First ASR interim received: "${result.text}", stopping TTS`);
+        // 第一次收到 interim 事件（ASR 开始识别），立即停止 TTS
+        if (!streamInfo.ttsStopped) {
+          console.log(`[VoiceHandler] ASR interim triggered, stopping TTS immediately`);
           streamInfo.ttsStopped = true;
           
           // 发送 speaker:stop 给前端，停止 TTS 播放
@@ -127,7 +127,7 @@ export function createVoiceHandlers(voiceOrchestrator) {
           type: 'voice:asr:interim',
           data: {
             streamId,
-            text: result.text
+            text: result.text || ''
           }
         });
       });
